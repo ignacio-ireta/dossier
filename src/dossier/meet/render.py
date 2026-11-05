@@ -169,8 +169,8 @@ def write_outputs(
             folder / "actions.json",
             [
                 {
-                    "task": a.text,
-                    "owner": a.owner,
+                    "task": confirmed_names(record, a.text),
+                    "owner": confirmed_names(record, a.owner),
                     "due": a.due,
                     "at": a.stamp(),
                     "at_seconds": round(a.at, 1),

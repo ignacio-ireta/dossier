@@ -338,6 +338,37 @@ def test_detect_language_restricts_to_candidates(tmp_path: Path) -> None:
     assert detect_language(asr, wav).language == "pt"
 
 
+def test_actions_json_uses_confirmed_names(tmp_path: Path) -> None:
+    from dossier.meet.models import MeetingRecord
+    from dossier.meet.render import write_outputs
+    from dossier.meet.summarize import Item, MeetingSummary
+
+    (tmp_path / "machine").mkdir()
+    record = MeetingRecord(
+        id="m",
+        title="T",
+        date="2026-11-02",
+        source="x.wav",
+        sha256="0" * 64,
+        speakers={
+            "SPEAKER_00": SpeakerInfo(label="SPEAKER_00", name="Sam", status="confirmed"),
+            "SPEAKER_01": SpeakerInfo(label="SPEAKER_01", name="Alex", status="suggested"),
+        },
+    )
+    summary = MeetingSummary(
+        actions=[
+            Item("SPEAKER_00 sends the checklist", 9.0, owner="SPEAKER_00"),
+            Item("Review it", 12.0, owner="SPEAKER_01"),
+        ]
+    )
+    write_outputs(tmp_path, record, [], summary)
+    actions = json.loads((tmp_path / "actions.json").read_text())
+    assert [(a["task"], a["owner"]) for a in actions] == [
+        ("Sam sends the checklist", "Sam"),
+        ("Review it", "SPEAKER_01"),  # a suggestion is never used as a name
+    ]
+
+
 def test_speaker_assignment_and_turns() -> None:
     words = [
         Word(start=0.0, end=0.5, text="hi"),
