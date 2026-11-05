@@ -45,6 +45,21 @@ mmdc, draw.io, LibreOffice) skip when it is missing. `tests/e2e.py` drives the
 installed `dsr` end to end (documents, a synthetic two-voice meeting, rendering,
 MCP over stdio) and needs Ollama with the default models.
 
+## Building the bundle
+
+The bundle is what gets shared: a zip with the wheel, the source
+distribution, a git bundle of the history, the Brewfile, the docs and
+checksums.
+
+```bash
+python3 scripts/build_bundle.py        # -> dist/dossier-<version>-bundle.zip
+```
+
+It refuses to build from uncommitted changes or when the denylist finds
+anything in the tree or the history. Before building a release, set the
+version in `pyproject.toml`, add it to `CHANGELOG.md`, run the checks and
+`tests/e2e.py`, and tag the commit (`git tag -a v<version>`).
+
 ## The neutral template pack
 
 `src/dossier/docs/packs/neutral/` is generated, not hand-edited:
