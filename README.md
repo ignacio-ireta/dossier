@@ -11,9 +11,10 @@ It is local-first: everything runs on your machine with small local models such 
 Gemma 4 E2B, and nothing is sent elsewhere unless a workspace's policy explicitly
 allows a named external provider.
 
-> Status: early development. Workspace setup, policy, model routing and
-> diagnostics work today; conversion, indexing, search, meetings and documents are
-> being added milestone by milestone.
+> Status: early development. Working today: workspace setup, policy, model
+> routing, diagnostics, and the corpus (conversion, incremental sync,
+> scheduling). Indexing, search, agent access, meetings and documents are being
+> added milestone by milestone.
 
 ## Install (macOS)
 
@@ -33,7 +34,11 @@ dsr init --name "Acme"            # folders + dossier.toml, processing policy "p
 dsr setup --with llm              # pulls the configured local models
 dsr models test                   # probes every model role
 dsr policy approve                # once processing this material here is permitted
+dsr sync                          # convert sources/ into corpus/ (and later index it)
+dsr schedule install --at 07:30   # keep it current automatically
 ```
+
+See [docs/corpus.md](docs/corpus.md) for what each file type becomes.
 
 ## Concepts
 

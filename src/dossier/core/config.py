@@ -123,6 +123,25 @@ class TaxonomySection(_Strict):
     tasks: list[TaxonomyEntry] = Field(default_factory=list)
 
 
+class OcrMode(StrEnum):
+    OFF = "off"
+    AUTO = "auto"  # OCR images and pages without a text layer
+    FORCE = "force"  # OCR every PDF page, ignoring embedded text
+
+
+class ConvertSection(_Strict):
+    ocr: OcrMode = OcrMode.AUTO
+    max_file_mb: int = Field(default=200, ge=1, le=10_000)
+    max_sheet_rows: int = Field(default=50_000, ge=10)
+    preview_rows: int = Field(default=20, ge=1, le=500)
+    mass_delete_ratio: float = Field(
+        default=0.5,
+        gt=0,
+        le=1,
+        description="Refuse a sync that would delete more than this share of a source.",
+    )
+
+
 class DocsSection(_Strict):
     template: str = "neutral"
 
@@ -144,6 +163,7 @@ class WorkspaceConfig(_Strict):
     models: dict[str, ModelRoute] = Field(default_factory=dict)
     authority: list[AuthorityRule] = Field(default_factory=list)
     taxonomy: TaxonomySection = Field(default_factory=TaxonomySection)
+    convert: ConvertSection = Field(default_factory=ConvertSection)
     docs: DocsSection = Field(default_factory=DocsSection)
     agent: AgentSection = Field(default_factory=AgentSection)
     meet: MeetSection = Field(default_factory=MeetSection)

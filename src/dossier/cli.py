@@ -4,30 +4,26 @@ from __future__ import annotations
 
 import json
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
 import typer
-from rich.console import Console
 from rich.table import Table
 
 from dossier import __version__
+from dossier.commands import corpus as corpus_commands
+from dossier.commands.common import State, console, emit, err_console, get_state
 from dossier.core import logging as dlogging
 from dossier.core.config import ProcessingStatus
-from dossier.core.errors import EX_FAILURE, DossierError, WorkspaceNotFoundError
+from dossier.core.errors import EX_FAILURE, DossierError
 from dossier.core.policy import set_processing
 from dossier.core.secrets import delete_secret, set_secret
-from dossier.core.workspace import Workspace, open_workspace
 from dossier.llm.router import ModelRouter
 from dossier.ops import doctor as doctor_ops
 from dossier.ops import models as model_ops
 from dossier.ops import setup as setup_ops
 from dossier.ops.init import DEFAULT_CHAT_MODEL, DEFAULT_EMBED_MODEL, init_workspace
 from dossier.ops.tools import FEATURES
-
-console = Console()
-err_console = Console(stderr=True)
 
 app = typer.Typer(
     name="dsr",
@@ -44,32 +40,6 @@ secrets_app = typer.Typer(help="Store API keys and tokens in the OS keyring.", n
 app.add_typer(policy_app, name="policy")
 app.add_typer(models_app, name="models")
 app.add_typer(secrets_app, name="secrets")
-
-
-@dataclass
-class State:
-    workspace_path: Path | None = None
-    json: bool = False
-
-    def workspace(self) -> Workspace:
-        return open_workspace(self.workspace_path)
-
-    def maybe_workspace(self) -> Workspace | None:
-        try:
-            return self.workspace()
-        except WorkspaceNotFoundError:
-            return None
-
-
-def _state(ctx: typer.Context) -> State:
-    obj = ctx.find_root().obj
-    assert isinstance(obj, State)
-    return obj
-
-
-def _emit(state: State, data: Any) -> None:
-    if state.json:
-        sys.stdout.write(json.dumps(data, indent=2, ensure_ascii=False, default=str) + "\n")
 
 
 @app.callback()
@@ -89,9 +59,9 @@ def _root(
 @app.command()
 def version(ctx: typer.Context) -> None:
     """Print the dossier version."""
-    state = _state(ctx)
+    state = get_state(ctx)
     if state.json:
-        _emit(state, {"version": __version__})
+        emit(state, {"version": __version__})
     else:
         console.print(__version__)
 
@@ -106,7 +76,7 @@ def init(
     force: Annotated[bool, typer.Option(help="Overwrite an existing dossier.toml.")] = False,
 ) -> None:
     """Create a workspace: folders plus a commented dossier.toml (policy: pending)."""
-    state = _state(ctx)
+    state = get_state(ctx)
     root = path.resolve()
     paths = init_workspace(
         root,
@@ -116,7 +86,7 @@ def init(
         force=force,
     )
     if state.json:
-        _emit(state, {"workspace": str(paths.root), "config": str(paths.config)})
+        emit(state, {"workspace": str(paths.root), "config": str(paths.config)})
         return
     console.print(f"Created workspace at [bold]{paths.root}[/bold]")
     console.print("Next steps:")
@@ -131,10 +101,10 @@ _LEVEL_STYLE = {"ok": "green", "info": "cyan", "warn": "yellow", "fail": "red"}
 @app.command()
 def doctor(ctx: typer.Context) -> None:
     """Check runtime, platform backends, external tools, extras, and the workspace."""
-    state = _state(ctx)
+    state = get_state(ctx)
     checks = doctor_ops.run_doctor(state.maybe_workspace())
     if state.json:
-        _emit(state, [check.as_dict() for check in checks])
+        emit(state, [check.as_dict() for check in checks])
     else:
         table = Table(show_header=True, header_style="bold")
         for column in ("group", "check", "status", "detail", "fix"):
@@ -163,12 +133,12 @@ def setup(
     yes: Annotated[bool, typer.Option("--yes", "-y", help="Run without asking.")] = False,
 ) -> None:
     """Install the system tools and models that selected features need."""
-    state = _state(ctx)
+    state = get_state(ctx)
     features = {item.strip() for item in with_.split(",") if item.strip()}
     workspace = state.maybe_workspace()
     plan = setup_ops.plan_setup(features, workspace.config if workspace else None)
     if state.json and not yes:
-        _emit(state, {"commands": plan.commands, "manual": plan.manual, "ok": plan.satisfied})
+        emit(state, {"commands": plan.commands, "manual": plan.manual, "ok": plan.satisfied})
         return
     for line in plan.satisfied:
         console.print(f"[green]ok[/green]   {line}")
@@ -192,7 +162,7 @@ def setup(
 @app.command()
 def status(ctx: typer.Context) -> None:
     """Show the workspace, its policy, and the latest run."""
-    state = _state(ctx)
+    state = get_state(ctx)
     workspace = state.workspace()
     config = workspace.config
     runs = sorted(workspace.paths.runs.glob("*/report.json"))
@@ -208,7 +178,7 @@ def status(ctx: typer.Context) -> None:
         "latest_run": latest,
     }
     if state.json:
-        _emit(state, data)
+        emit(state, data)
         return
     console.print(f"[bold]{config.workspace.name}[/bold]  {workspace.root}")
     console.print(
@@ -227,11 +197,11 @@ def status(ctx: typer.Context) -> None:
 @policy_app.command("show")
 def policy_show(ctx: typer.Context) -> None:
     """Print the policy block."""
-    state = _state(ctx)
+    state = get_state(ctx)
     policy = state.workspace().config.policy
     data = policy.model_dump(mode="json")
     if state.json:
-        _emit(state, data)
+        emit(state, data)
     else:
         for key, value in data.items():
             console.print(f"{key} = {value}")
@@ -244,7 +214,7 @@ def policy_approve(
     yes: Annotated[bool, typer.Option("--yes", "-y")] = False,
 ) -> None:
     """Permit dossier to read and process this workspace's sources on this machine."""
-    state = _state(ctx)
+    state = get_state(ctx)
     workspace = state.workspace()
     if not yes and not state.json:
         console.print(
@@ -255,7 +225,7 @@ def policy_approve(
         if not typer.confirm("Approve processing?", default=False):
             raise typer.Exit(0)
     set_processing(workspace.paths.config, ProcessingStatus.APPROVED, note=note)
-    _emit(state, {"processing": "approved"})
+    emit(state, {"processing": "approved"})
     if not state.json:
         console.print("processing = approved")
 
@@ -266,10 +236,10 @@ def policy_prohibit(
     note: Annotated[str, typer.Option(help="Reason (no personal data).")] = "",
 ) -> None:
     """Stop all processing of this workspace's sources."""
-    state = _state(ctx)
+    state = get_state(ctx)
     workspace = state.workspace()
     set_processing(workspace.paths.config, ProcessingStatus.PROHIBITED, note=note)
-    _emit(state, {"processing": "prohibited"})
+    emit(state, {"processing": "prohibited"})
     if not state.json:
         console.print("processing = prohibited")
 
@@ -277,10 +247,10 @@ def policy_prohibit(
 @models_app.command("list")
 def models_list(ctx: typer.Context) -> None:
     """Show which provider and model each role uses."""
-    state = _state(ctx)
+    state = get_state(ctx)
     rows = model_ops.describe_roles(state.workspace().config)
     if state.json:
-        _emit(state, rows)
+        emit(state, rows)
         return
     table = Table("role", "provider", "model", "context", "output", "think")
     for row in rows:
@@ -313,13 +283,13 @@ def models_test(
     role: Annotated[list[str] | None, typer.Option(help="Roles to test (default: all).")] = None,
 ) -> None:
     """Send a tiny probe (no workspace content) to each role and report the result."""
-    state = _state(ctx)
+    state = get_state(ctx)
     config = state.workspace().config
     router = ModelRouter(config)
     roles = role or [name for name in config.models]
     results = [model_ops.probe_role(router, name) for name in roles]
     if state.json:
-        _emit(state, [result.__dict__ for result in results])
+        emit(state, [result.__dict__ for result in results])
     else:
         table = Table("role", "model", "status", "seconds", "detail")
         for result in results:
@@ -352,6 +322,9 @@ def secrets_set(
 def secrets_delete(name: Annotated[str, typer.Argument()]) -> None:
     """Remove a secret from the OS keyring."""
     console.print("deleted" if delete_secret(name) else "not found")
+
+
+corpus_commands.register(app)
 
 
 def main() -> None:
