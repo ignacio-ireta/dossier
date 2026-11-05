@@ -125,7 +125,7 @@ def register(app: typer.Typer) -> None:
             list[str] | None, typer.Option("--stage", help="Only these stages.")
         ] = None,
     ) -> None:
-        """Run every stage: convert, then index, then meetings."""
+        """Run every stage: convert, then meetings, then index."""
         _run(
             ctx,
             SyncOptions(
