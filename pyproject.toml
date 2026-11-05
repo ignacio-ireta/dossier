@@ -1,0 +1,79 @@
+[project]
+name = "dossier"
+version = "0.1.0.dev0"
+description = "Local-first context suite for AI agents: keep a project corpus converted, summarized and searchable, process meetings, and render documents from per-account templates."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "NOTICE.md"]
+authors = [{ name = "The dossier contributors" }]
+requires-python = ">=3.12,<3.13"
+classifiers = [
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Environment :: Console",
+]
+dependencies = [
+    "httpx>=0.28",
+    "keyring>=25.0",
+    "platformdirs>=4.3",
+    "pydantic>=2.10",
+    "rich>=13.9",
+    "tomlkit>=0.13",
+    "typer>=0.15",
+]
+
+[project.optional-dependencies]
+ocr = ["ocrmac>=1.0.1 ; sys_platform == 'darwin'"]
+embed = ["sqlite-vec>=0.1.6"]
+mcp = ["mcp>=1.6"]
+cloud = ["anthropic>=0.40", "openai>=1.60"]
+all = ["dossier[ocr,embed,mcp,cloud]"]
+
+[project.scripts]
+dsr = "dossier.cli:main"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dossier"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/dossier", "templates", "skills", "docs", "scripts",
+    "README.md", "CONTRIBUTING.md", "LICENSE", "NOTICE.md", "Brewfile",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "PTH"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["ocrmac.*", "sqlite_vec.*", "keyring.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "live_model: needs a running local model server (deselect with -m 'not live_model')",
+]
