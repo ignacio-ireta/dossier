@@ -37,6 +37,7 @@ class SyncOptions:
     retry_failed: bool = False
     sources: list[str] | None = None
     stages: list[str] | None = None  # default: all registered stages
+    force_index: bool = False
 
 
 @dataclass
@@ -76,8 +77,23 @@ def _convert_stage(ctx: SyncContext) -> dict[str, Any]:
     }
 
 
-# Ordered registry; later milestones append index and meetings stages.
-STAGES: dict[str, Stage] = {"convert": _convert_stage}
+def _index_stage(ctx: SyncContext) -> dict[str, Any]:
+    from dossier.index.pipeline import run_index
+
+    result = run_index(
+        ctx.workspace,
+        run_id=ctx.report.run_id,
+        scheduled=ctx.options.scheduled,
+        force=ctx.options.force_index,
+        dry_run=ctx.options.dry_run,
+        progress=ctx.progress,
+    )
+    ctx.attention.extend(f"index: {note}" for note in result.attention)
+    return {"counts": result.counts, "attention": result.attention}
+
+
+# Ordered registry; the meetings stage registers itself when its extra is present.
+STAGES: dict[str, Stage] = {"convert": _convert_stage, "index": _index_stage}
 
 
 def register_stage(name: str, stage: Stage) -> None:

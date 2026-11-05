@@ -62,12 +62,19 @@ max_output_tokens = 1024
 [models.embed]           # search embeddings
 provider = "local"
 model = {embed_model}
+# Task prompts for EmbeddingGemma; clear them for models without task prompts.
+query_prefix = "task: search result | query: "
+document_prefix = "title: none | text: "
 
 [models.vision]          # slide and image captions (needs an image-capable model)
 enabled = false
 provider = "local"
 model = {chat_model}
 accepts_images = true
+
+[index]
+chunk_tokens = 350
+search_backend = "native"   # native | qmd
 
 [docs]
 template = "neutral"     # default template pack for rendered documents

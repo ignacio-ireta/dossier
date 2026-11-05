@@ -12,6 +12,7 @@ from rich.table import Table
 
 from dossier import __version__
 from dossier.commands import corpus as corpus_commands
+from dossier.commands import knowledge as knowledge_commands
 from dossier.commands.common import State, console, emit, err_console, get_state
 from dossier.core import logging as dlogging
 from dossier.core.config import ProcessingStatus
@@ -325,6 +326,7 @@ def secrets_delete(name: Annotated[str, typer.Argument()]) -> None:
 
 
 corpus_commands.register(app)
+knowledge_commands.register(app, models_app)
 
 
 def main() -> None:

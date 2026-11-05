@@ -38,6 +38,10 @@ from dossier.convert.model import (
 _ORDERED_MARKER = re.compile(r"^(\d+)([.)])(\s|$)")
 _STRUCTURAL_MARKER = re.compile(r"^([#>*+-]|={3,}|-{3,})(\s|$)")
 
+# Bump when the rendered Markdown changes, so existing outputs are regenerated.
+WRITER_VERSION = 2
+FRONT_MATTER_PROPERTIES = frozenset({"Created", "Modified", "Pages", "Slides", "Sheets"})
+
 _SECTION_LABEL = {
     SectionKind.SLIDE: "Slide",
     SectionKind.NOTES: "Speaker notes, slide",
@@ -156,11 +160,20 @@ def render(
     warnings: Sequence[ExtractionWarning] = (),
     sheet_csvs: dict[str, str] | None = None,
 ) -> str:
-    parts = [front_matter(meta), f"# {doc.title or file_name}"]
+    # Dates and counts describe the file, not its content: keep them in front matter
+    # so summaries and search see only what the document says.
+    fields = dict(meta)
+    body_props: dict[str, str] = {}
+    for key, value in doc.properties.items():
+        if key in FRONT_MATTER_PROPERTIES:
+            fields[key.lower()] = value
+        else:
+            body_props[key] = value
     if doc.title and doc.title != file_name:
-        parts.append(f"Source file: `{file_name}`")
-    if doc.properties:
-        parts.append("\n".join(f"- {key}: {value}" for key, value in doc.properties.items()))
+        fields["file"] = file_name
+    parts = [front_matter(fields), f"# {doc.title or file_name}"]
+    if body_props:
+        parts.append("\n".join(f"- {key}: {value}" for key, value in body_props.items()))
     for section in doc.sections:
         heading = _section_heading(section)
         csv_path = (sheet_csvs or {}).get(section.title or "")

@@ -36,14 +36,19 @@ def plan_setup(features: set[str], config: WorkspaceConfig | None) -> SetupPlan:
     if unknown:
         raise ValueError(f"unknown features {sorted(unknown)}; choose from {sorted(FEATURES)}")
     plan = SetupPlan()
+    planned: set[str] = set()
     for tool in tools_for(features):
         location = tool.locate()
         if location:
             plan.satisfied.append(f"{tool.key}: {location}")
+            planned.add(tool.key)
             continue
         hint = tool.install_hint()
         if sys.platform == "darwin" and shutil.which("brew") and hint.startswith("brew "):
             plan.commands.append(hint.split())
+            planned.add(tool.key)
+        elif hint.startswith("bun install") and "bun" in planned:
+            plan.commands.append(hint.split())  # bun is present or installed just before
         else:
             plan.manual.append(f"{tool.key}: {hint}")
     extras = sorted(

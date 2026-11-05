@@ -18,6 +18,7 @@ class ExternalTool:
     cask: str | None = None
     other_install: str | None = None
     mac_app_paths: tuple[str, ...] = ()
+    extra_paths: tuple[str, ...] = ()  # checked on every OS; "~" is expanded
     optional: bool = False
 
     def locate(self) -> Path | None:
@@ -25,11 +26,13 @@ class ExternalTool:
             found = shutil.which(command)
             if found:
                 return Path(found)
+        candidates = list(self.extra_paths)
         if sys.platform == "darwin":
-            for candidate in self.mac_app_paths:
-                path = Path(candidate)
-                if path.is_file():
-                    return path
+            candidates += list(self.mac_app_paths)
+        for candidate in candidates:
+            path = Path(candidate).expanduser()
+            if path.is_file():
+                return path
         return None
 
     def install_hint(self) -> str:
@@ -76,6 +79,15 @@ TOOLS: tuple[ExternalTool, ...] = (
         optional=True,
     ),
     ExternalTool("bun", ("bun",), ("qmd",), "runtime for qmd", brew="bun", optional=True),
+    ExternalTool(
+        "qmd",
+        ("qmd",),
+        ("qmd",),
+        "optional qmd search backend",
+        other_install="bun install -g @tobilu/qmd",
+        extra_paths=("~/.bun/bin/qmd",),
+        optional=True,
+    ),
 )
 
 FEATURES: dict[str, str] = {

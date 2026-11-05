@@ -62,6 +62,12 @@ def require_processing(config: WorkspaceConfig, action: str) -> None:
         )
 
 
+def require_not_prohibited(config: WorkspaceConfig, action: str) -> None:
+    """Reading what was already processed is allowed unless processing is prohibited."""
+    if config.policy.processing is ProcessingStatus.PROHIBITED:
+        raise PolicyBlockedError(f"{action} blocked: workspace policy processing=prohibited")
+
+
 def provider_is_external(provider: ProviderConfig) -> bool:
     if provider.kind is ProviderKind.ANTHROPIC:
         return True

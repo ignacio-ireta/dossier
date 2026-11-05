@@ -12,9 +12,9 @@ Gemma 4 E2B, and nothing is sent elsewhere unless a workspace's policy explicitl
 allows a named external provider.
 
 > Status: early development. Working today: workspace setup, policy, model
-> routing, diagnostics, and the corpus (conversion, incremental sync,
-> scheduling). Indexing, search, agent access, meetings and documents are being
-> added milestone by milestone.
+> routing, diagnostics, the corpus (conversion, incremental sync, scheduling),
+> and the index (cards, folder summaries, TREE/INDEX, hybrid search, qmd).
+> Agent access, meetings and documents are being added milestone by milestone.
 
 ## Install (macOS)
 
@@ -38,7 +38,8 @@ dsr sync                          # convert sources/ into corpus/ (and later ind
 dsr schedule install --at 07:30   # keep it current automatically
 ```
 
-See [docs/corpus.md](docs/corpus.md) for what each file type becomes.
+See [docs/corpus.md](docs/corpus.md) for what each file type becomes and
+[docs/index.md](docs/index.md) for cards, folder summaries and search.
 
 ## Concepts
 

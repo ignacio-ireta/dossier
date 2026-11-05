@@ -93,6 +93,9 @@ class ModelRoute(_Strict):
     extra: dict[str, Any] = Field(
         default_factory=dict, description="Extra request fields passed through to the server."
     )
+    # Embedding models trained with task prompts (e.g. EmbeddingGemma) expect them.
+    query_prefix: str = ""
+    document_prefix: str = ""
 
     @model_validator(mode="after")
     def _model_required(self) -> ModelRoute:
@@ -142,6 +145,23 @@ class ConvertSection(_Strict):
     )
 
 
+class SearchBackend(StrEnum):
+    NATIVE = "native"
+    QMD = "qmd"
+
+
+class IndexSection(_Strict):
+    chunk_tokens: int = Field(default=350, ge=64, le=4000)
+    redo_degraded: bool = Field(
+        default=True, description="Regenerate fallback cards once the model is reachable."
+    )
+    max_windows_per_document: int = Field(default=24, ge=1, le=500)
+    search_backend: SearchBackend = SearchBackend.NATIVE
+    qmd_index: str | None = Field(
+        default=None, description="qmd index name (default: derived from the workspace)."
+    )
+
+
 class DocsSection(_Strict):
     template: str = "neutral"
 
@@ -164,6 +184,7 @@ class WorkspaceConfig(_Strict):
     authority: list[AuthorityRule] = Field(default_factory=list)
     taxonomy: TaxonomySection = Field(default_factory=TaxonomySection)
     convert: ConvertSection = Field(default_factory=ConvertSection)
+    index: IndexSection = Field(default_factory=IndexSection)
     docs: DocsSection = Field(default_factory=DocsSection)
     agent: AgentSection = Field(default_factory=AgentSection)
     meet: MeetSection = Field(default_factory=MeetSection)

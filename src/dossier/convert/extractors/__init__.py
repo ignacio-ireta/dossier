@@ -43,7 +43,10 @@ def extractor_for(path: Path) -> Extractor | None:
 
 
 def extractor_id(extractor: Extractor) -> str:
-    return f"{extractor.name}@{extractor.version}"
+    """Identifies what produced an output; a change re-extracts the file."""
+    from dossier.convert.markdown import WRITER_VERSION
+
+    return f"{extractor.name}@{extractor.version}+w{WRITER_VERSION}"
 
 
 __all__ = [
