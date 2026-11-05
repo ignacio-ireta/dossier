@@ -9,8 +9,9 @@ Point it at an account's folders and it:
 - **summarizes and indexes it**: a card per document, a summary per folder, a map
   of the whole tree (`INDEX.md`, `TREE.md`), and hybrid keyword + semantic search;
 - **processes meetings**: transcription in the language spoken (detected per
-  recording), speaker separation, speaker-name suggestions, a per-account
-  glossary, summaries, decisions and action items with checked timestamps;
+  recording), speaker separation, a quick listen-and-name review with an audio
+  check, speaker-name suggestions, a per-account glossary, summaries, decisions
+  and action items with checked timestamps;
 - **renders deliverables**: DOCX, PPTX and PDF from Markdown, with Mermaid and
   draw.io diagrams, using each account's own template packs;
 - **serves agents**: an MCP server, a CLI where every command has `--json`, and
@@ -63,7 +64,8 @@ dsr mcp install                        # connect Claude Code (prints the command
 dsr init | doctor | setup | status | policy | secrets
 dsr sync | convert | index | schedule
 dsr search | tree | read | taxonomy suggest | qmd sync
-dsr meet add | list | show | speakers | summarize | brief | eval      dsr people ...
+dsr meet add | list | show | review | identify | speakers | summarize | brief | eval
+dsr people ...
 dsr docs render | templates list | show | inspect | new | import
 dsr models list | test | bench
 dsr mcp serve | install      dsr skill path | install

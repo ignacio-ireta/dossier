@@ -92,6 +92,13 @@ def meetings_stage(workspace: Workspace, *, dry_run: bool, scheduled: bool) -> d
     for key, media in pending:
         try:
             record = process_recording(workspace, media.path, MeetOptions(scheduled=scheduled))
+            if record.review_status == "pending":
+                unnamed = sum(1 for s in record.speakers.values() if s.status != "confirmed")
+                counts["to_identify"] = counts.get("to_identify", 0) + 1
+                notes.append(
+                    f"meeting {record.id}: {unnamed} speaker(s) to name; "
+                    f"run `dsr meet identify {record.id}`"
+                )
             state[key] = {
                 "size": media.size,
                 "mtime_ns": media.mtime_ns,

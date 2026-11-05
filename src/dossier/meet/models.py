@@ -30,12 +30,16 @@ class Turn(BaseModel):
     text: str
 
 
+Grade = Literal["good", "fair", "poor"]
+
+
 class SpeakerInfo(BaseModel):
     label: str  # SPEAKER_00 ...
     seconds: float = 0.0
     name: str | None = None
     status: Literal["unknown", "suggested", "confirmed"] = "unknown"
     confidence: float | None = None
+    quality: Grade | None = None  # audio quality, as rated by the person who identified them
 
     def display(self) -> str:
         if self.status == "confirmed" and self.name:
@@ -71,6 +75,8 @@ class MeetingRecord(BaseModel):
     stages: dict[str, StageRecord] = Field(default_factory=dict)
     deck: str | None = None
     summary_status: Literal["none", "ok", "degraded"] = "none"
+    review_status: Literal["none", "pending", "done"] = "none"  # speaker review
+    audio_quality: Grade | None = None  # the whole recording, as rated by a person
 
 
 def language_label(record: MeetingRecord) -> str:

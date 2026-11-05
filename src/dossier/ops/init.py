@@ -88,6 +88,8 @@ allow_render = false     # let MCP clients render documents
 [meet]
 # language = "auto"          # or "es", "en"...; default: auto with several languages
 # glossary = "glossary.toml" # terms and mishearings; see docs/meetings.md
+# people = ["Alex", "Sam"]   # who usually speaks: the choices when naming speakers
+speaker_review = false       # true: cut short clips of unnamed speakers for `dsr meet identify`
 speaker_voiceprints = false  # opt-in; voiceprints are biometric data
 """
 

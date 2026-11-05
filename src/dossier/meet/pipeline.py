@@ -3,7 +3,11 @@
 Stages (each recorded in ``meeting.json`` with a version, so a re-run resumes
 and a changed stage re-runs it and everything after it):
 
-    audio -> asr -> diarize -> assign -> identify -> deck -> summarize -> render
+    audio -> asr -> diarize -> assign -> identify -> deck -> summarize -> render -> review
+
+``review`` (with ``[meet] speaker_review``) cuts short clips of unidentified
+speakers for a person to name; see :mod:`dossier.meet.review`. It comes last
+because nothing else depends on it.
 
 A meeting is identified by the content hash of its recording: the same file
 added twice (or moved) is the same meeting.
@@ -67,6 +71,7 @@ STAGES: dict[str, int] = {
     "deck": 1,
     "summarize": 1,
     "render": 1,
+    "review": 1,
 }
 Progress = Callable[[str, str], None]
 
@@ -344,10 +349,10 @@ def process_recording(
             turns = to_turns(assign(words, diar.segments))
             atomic_write_json(machine / "turns.json", [t.model_dump() for t in turns])
             table = speaker_table(diar.segments, turns)
-            for label, info in record.speakers.items():  # keep confirmed names
+            for label, info in record.speakers.items():  # keep confirmed names and ratings
                 if label in table and info.status == "confirmed":
                     table[label] = table[label].model_copy(
-                        update={"name": info.name, "status": "confirmed"}
+                        update={"name": info.name, "status": "confirmed", "quality": info.quality}
                     )
             record.speakers = table
             finish("assign")
@@ -401,9 +406,37 @@ def process_recording(
         needed("render")
         write_outputs(folder, record, turns, summary_from_json(read_json(machine / "summary.json")))
         finish("render")
+        if needed("review"):
+            _review_stage(workspace, folder, record, source, finish)
     if wav.exists() and not settings.keep_audio:
         wav.unlink()
     return record
+
+
+def _review_stage(
+    workspace: Workspace,
+    folder: Path,
+    record: MeetingRecord,
+    source: Path,
+    finish: Callable[..., None],
+) -> None:
+    if not workspace.config.meet.speaker_review:
+        finish("review", "skipped", "speaker_review is off")
+        return
+    if all(info.status == "confirmed" for info in record.speakers.values()):
+        finish("review", "skipped", "every speaker is confirmed")
+        return
+    from dossier.meet.review import build_review
+
+    try:
+        review = build_review(workspace, folder, recording=source)
+    except DossierError as exc:  # the meeting itself is fine; only the clips are missing
+        log.warning("meeting %s: speaker review not prepared: %s", record.id, exc.code)
+        finish("review", "failed", exc.code)
+        return
+    record.review_status = "pending"
+    clips = sum(len(s.clips) for s in review.speakers) if review else 0
+    finish("review", detail=f"{len(review.speakers) if review else 0} speakers, {clips} clips")
 
 
 def _detect(workspace: Workspace, asr: AsrBackend, wav: Path, record: MeetingRecord) -> None:
@@ -441,9 +474,14 @@ def rerender(workspace: Workspace, folder: Path) -> MeetingRecord:
 
 
 def confirm_speakers(
-    workspace: Workspace, folder: Path, mapping: dict[str, str]
+    workspace: Workspace,
+    folder: Path,
+    mapping: dict[str, str],
+    *,
+    enroll: set[str] | None = None,
 ) -> tuple[MeetingRecord, list[str]]:
-    """Confirm names for speaker labels; enroll voiceprints where consent exists."""
+    """Confirm names for speaker labels; enroll voiceprints where consent exists
+    (only for the labels in ``enroll``, when given)."""
     record = load_record(folder)
     notes: list[str] = []
     unknown = sorted(set(mapping) - set(record.speakers))
@@ -458,12 +496,22 @@ def confirm_speakers(
             update={"name": name, "status": "confirmed", "confidence": None}
         )
         embedding = diar.get("embeddings", {}).get(label)
-        if settings.speaker_voiceprints and embedding:
+        allowed = enroll is None or label in enroll
+        if settings.speaker_voiceprints and embedding and allowed:
             try:
                 people_store.enroll(workspace.paths, name, embedding, settings.diarization_model)
                 notes.append(f"voiceprint updated for {name}")
             except DossierError as exc:
                 notes.append(exc.message)
+    if record.review_status == "pending" and all(
+        info.status == "confirmed" for info in record.speakers.values()
+    ):
+        from dossier.meet.review import clear_clips
+
+        record.review_status = "done"
+        removed = clear_clips(folder)
+        if removed:
+            notes.append(f"every speaker is named; {removed} review clips deleted")
     save_record(folder, record)
     rerender(workspace, folder)
     return record, notes

@@ -114,7 +114,9 @@ def test_process_recording_with_fake_engines(approved: Workspace, tmp_path: Path
     assert record.date == "2026-11-02" and record.title == "Rollout review"
     assert set(record.speakers) == {"SPEAKER_00", "SPEAKER_01"}
     assert all(
-        s.status == "done" for k, s in record.stages.items() if k not in {"identify", "deck"}
+        s.status == "done"
+        for k, s in record.stages.items()
+        if k not in {"identify", "deck", "review"}
     )
     folder = approved.paths.meetings / record.id
     transcript = (folder / "transcript.md").read_text()

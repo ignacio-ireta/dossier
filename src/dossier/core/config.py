@@ -199,6 +199,17 @@ class MeetSection(_Strict):
         default=False, description="Opt-in speaker recognition; voiceprints are biometric data."
     )
     voiceprint_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
+    people: list[str] = Field(
+        default_factory=list,
+        description="Names of the people who usually speak: the choices when identifying speakers.",
+    )
+    speaker_review: bool = Field(
+        default=False,
+        description=(
+            "After transcription, cut short clips of each unidentified speaker and check the "
+            "audio, ready for `dsr meet identify`."
+        ),
+    )
 
     @field_validator("language")
     @classmethod

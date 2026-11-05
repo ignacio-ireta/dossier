@@ -23,7 +23,8 @@ Recordings dropped into a source folder are transcribed automatically by
 | `actions.json` | The action items, machine-readable |
 | `brief.md` | Written by `dsr meet brief`: summary items, slides, related documents |
 | `deck.md` | Text of the slides shown, when `--deck` was given |
-| `meeting.json` | Title, date, language, speakers, models used, stage status |
+| `meeting.json` | Title, date, language, speakers, audio ratings, models used, stage status |
+| `review/` | While speakers are unnamed: clips, `review.html`, `answers.toml`, `review.json` (see [Speaker names](#speaker-names)) |
 | `machine/` | Words as heard (`words.json`), diarization, turns after glossary fixes, `.srt`, `.vtt` |
 
 A transcript block holds everything a person says until someone else speaks,
@@ -103,27 +104,102 @@ the other language's passages come out less accurately.
 
 ## Speaker names
 
-Names are suggestions until a person confirms them:
+Diarization tells voices apart; a person says whose they are. Names are
+suggestions until someone confirms them, and the summary model never sees
+suggestions.
+
+### Identifying speakers with clips
+
+`dsr meet identify` makes naming speakers a few minutes of listening:
 
 ```bash
-dsr meet speakers <id>                              # who is who
-dsr meet speakers <id> --set SPEAKER_01="Sam"       # confirm
+dsr meet identify <id>
 ```
 
-With opt-in voiceprints (`[meet] speaker_voiceprints = true`), confirmed
-speakers can be recognized in later meetings:
+For each unnamed speaker it plays a short clip (3-10 seconds in which only that
+speaker talks) and asks who it is: a number from the list of names, a new
+name, `Enter` to accept the suggestion, `r` to replay, `n` for the next clip.
+Then it asks how the audio sounds (good, fair or poor, with the automatic
+check as the default) and finally rates the whole recording. The answers are
+applied at once.
+
+To hand the job to someone else, prepare a review page instead:
 
 ```bash
-dsr people consent "Sam" --note "agreed by email, 2026-11-02"
-dsr meet speakers <id> --set SPEAKER_01="Sam"       # now also stores Sam's voiceprint
+dsr meet review <id> --open
+```
+
+`meetings/<id>/review/` then holds the clips, `review.html` (a page that
+plays them, with a name and an audio rating per speaker and a **Save answers**
+button) and `answers.toml` (the same questions as a file to edit). Apply what
+comes back with:
+
+```bash
+dsr meet identify <id> --answers answers-<id>.toml
+```
+
+With `[meet] speaker_review = true`, the clips and the page are prepared for
+every new meeting that has unnamed speakers, and `dsr sync` lists those
+meetings. `[meet] people = ["Anne", "Beth", ...]` gives the names to choose
+from; names confirmed in earlier meetings and people with recorded consent are
+offered too. `dsr meet list` shows how many speakers each meeting still has to
+name. Speakers can still be named directly:
+`dsr meet speakers <id> --set SPEAKER_01="Sam"`.
+
+### What the audio check measures
+
+Each clip is cut from the original recording (not the normalized copy, so the
+check hears what was recorded) and gets a grade with reasons:
+
+| Measure | Fair below / above | Poor below / above |
+|---|---|---|
+| Speech above background noise | 20 dB | 10 dB |
+| Speech level | -35 dBFS | -45 dBFS |
+| Clipped (distorted) samples | 0.1 % | 1 % |
+| Recognizer confidence in the words | 0.75 | 0.5 |
+| Other voices in the clip | fair | |
+
+A speaker's grade is that of their best clip. The recording as a whole is
+rated from how much of the speech has several voices at once and how many
+words the recognizer was unsure of. A speaker with only a few seconds of speech
+is flagged as possibly part of another speaker's voice: give both labels the
+same name, and the transcript treats them as one person.
+
+The automatic check only measures the audio. Listening also catches
+diarization mistakes, such as one person's sentence in another speaker's group:
+name a speaker after the voice in most of their clips and mention the mistake in
+the notes.
+
+### Voiceprints: recognizing people in later meetings
+
+With opt-in voiceprints (`[meet] speaker_voiceprints = true`), naming a
+speaker also stores their voiceprint, so later meetings suggest the name:
+
+```bash
+dsr people consent "Anne" --note "agreed by email, 2026-11-02"
+dsr meet identify <id>                 # naming Anne stores her voiceprint
 dsr people list
-dsr people forget "Sam"                             # deletes consent and voiceprint
+dsr people forget "Anne"               # deletes consent and voiceprint
 ```
 
-Later transcripts show `SPEAKER_00 (likely Sam, 0.91)` until confirmed.
-`--attendee` limits suggestions to the people present. Voiceprints are
-biometric data: they are off by default, stored only in this workspace's
-`people/voiceprints.json`, and created only after consent is recorded.
+A voiceprint is stored only for people with recorded consent, and not from a
+speaker whose audio was rated poor or who has under 8 seconds of speech
+without other voices. Later transcripts show `SPEAKER_00 (likely Anne, 0.91)`
+until confirmed, and the review pre-fills the suggestion, so confirming is
+pressing `Enter`. `--attendee` limits suggestions to the people present.
+
+For a new project: list the team in `[meet] people`, record each person's
+consent, and identify the speakers of the first meeting or two. From then on,
+most speakers arrive already suggested.
+
+### Privacy
+
+Voiceprints are biometric data: off by default, stored only in this
+workspace's `people/voiceprints.json`, created only after consent is
+recorded. Review clips are voice recordings: they stay in the meeting's
+`review/` folder only until every speaker is named, then they are deleted
+(the reports and answers stay). They are never indexed. `dsr meet review`
+cuts them again while the recording is available.
 
 ## Glossary
 

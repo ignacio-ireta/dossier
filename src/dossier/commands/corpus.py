@@ -50,6 +50,8 @@ def _print_outcome(outcome: SyncOutcome, dry_run: bool) -> None:
         else:
             summary = ", ".join(f"{k}={v}" for k, v in _flat_counts(data).items())
             console.print(f"{stage}: {summary or 'done'}")
+            for note in data.get("notes", [])[:20]:
+                console.print(f"  {note}", highlight=False)
     for item in outcome.attention:
         console.print(f"[yellow]needs attention[/yellow] {item}")
     if not dry_run:

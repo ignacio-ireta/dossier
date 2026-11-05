@@ -93,7 +93,7 @@ Agents can also use the CLI: `dsr --json search "..."`, `dsr --json read <doc> -
 
 ```bash
 dsr meet add "2026-11-12 Steering committee.m4a" --attendee "Sam" --deck slides.pptx
-dsr meet speakers <id> --set SPEAKER_01="Sam"
+dsr meet identify <id>     # listen to each speaker's clips and name them
 
 dsr templates import "Acme report.dotx" --pack acme --kind report
 dsr docs render out/status-report.md --to docx --template acme:report

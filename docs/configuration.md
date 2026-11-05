@@ -95,4 +95,6 @@ are free-form.
 | `agent.allow_render` | Let MCP clients render documents. |
 | `meet.language` | Spoken language of meetings: a code (`"es"`, `"en"`...) or `"auto"` to detect it per recording. Default: `"auto"` when `languages` lists several, otherwise that language. `dsr meet add --language` overrides it per meeting. |
 | `meet.glossary` | Path to a glossary used for transcription (terms, mishearings, per-language sections; see [meetings](meetings.md#glossary)). |
+| `meet.people` | Names of the people who usually speak: the choices offered when naming speakers. |
+| `meet.speaker_review` | Prepare clips and a review page for every new meeting with unnamed speakers (`dsr meet identify`). Default `false`. |
 | `meet.speaker_voiceprints` | Opt-in speaker recognition; voiceprints are biometric data and stay local. |
