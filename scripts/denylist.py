@@ -212,7 +212,9 @@ def run_history(terms: list[tuple[str, Pattern[str]]]) -> Iterator[Finding]:
         return
     checked = subprocess.run(
         ["git", "cat-file", "--batch-check=%(objecttype) %(objectname)"],
-        input="\n".join(named).encode(), capture_output=True, check=True,
+        input="\n".join(named).encode(),
+        capture_output=True,
+        check=True,
     ).stdout.decode()
     for row in checked.splitlines():
         kind, _, sha = row.partition(" ")
