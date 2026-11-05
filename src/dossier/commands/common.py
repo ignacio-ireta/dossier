@@ -6,7 +6,7 @@ import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 import typer
 from rich.console import Console
@@ -39,6 +39,13 @@ def get_state(ctx: typer.Context) -> State:
     return obj
 
 
+# Set by the entry point in --json mode: the real stdout, kept apart from anything
+# libraries print while a command runs (those writes are sent to stderr).
+json_stream: TextIO | None = None
+
+
 def emit(state: State, data: Any) -> None:
     if state.json:
-        sys.stdout.write(json.dumps(data, indent=2, ensure_ascii=False, default=str) + "\n")
+        stream = json_stream or sys.stdout
+        stream.write(json.dumps(data, indent=2, ensure_ascii=False, default=str) + "\n")
+        stream.flush()

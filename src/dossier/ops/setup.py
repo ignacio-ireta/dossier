@@ -21,7 +21,7 @@ from dossier.ops.tools import FEATURES, tools_for
 
 # Python extras whose presence is checked by module name. OCR is checked through
 # the platform seam instead, because its backend differs per OS.
-_FEATURE_EXTRAS = {"llm": ("embed", "sqlite_vec")}
+_FEATURE_EXTRAS = {"llm": ("embed", "sqlite_vec"), "meet": ("meet", "pyannote")}
 
 
 @dataclass
@@ -63,6 +63,14 @@ def plan_setup(features: set[str], config: WorkspaceConfig | None) -> SetupPlan:
             "python extras: uv tool install --reinstall --python 3.12 "
             f"'dossier[{','.join(extras)}]'"
         )
+    if "meet" in features:
+        from dossier.core.secrets import get_secret
+
+        if not get_secret("hf-token"):
+            plan.manual.append(
+                "diarization model: accept the terms of pyannote/speaker-diarization-community-1 "
+                "on Hugging Face, then `dsr secrets set hf-token`"
+            )
     if "llm" in features and config is not None:
         for model in _ollama_models(config):
             plan.commands.append(["ollama", "pull", model])

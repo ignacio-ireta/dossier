@@ -70,11 +70,22 @@ def test_doctor_reports_unreachable_provider(workspace: Workspace) -> None:
 
 
 def test_main_maps_errors_to_exit_codes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["dsr", "--json", "status"])
     with pytest.raises(SystemExit) as caught:
         main()
     assert caught.value.code == 2
-    assert json.loads(capsys.readouterr().out)["error"]["code"] == "workspace_not_found"
+    assert json.loads(capfd.readouterr().out)["error"]["code"] == "workspace_not_found"
+
+
+def test_sync_without_approval_exits_78(
+    workspace: Workspace, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["dsr", "--json", "--workspace", str(workspace.root), "sync"])
+    with pytest.raises(SystemExit) as caught:
+        main()
+    assert caught.value.code == 78
+    assert json.loads(capfd.readouterr().out)["error"]["code"] == "policy_blocked"
+    assert not any(workspace.paths.runs.iterdir())  # nothing ran, nothing recorded

@@ -62,10 +62,11 @@ def _inline_refs(node: Any, defs: dict[str, Any]) -> Any:
             target = copy.deepcopy(defs[ref.removeprefix("#/$defs/")])
             merged = {**target, **{k: v for k, v in node.items() if k != "$ref"}}
             return _inline_refs(merged, defs)
+        # Drop "title" annotations (strings), never a property that is named "title".
         return {
             key: _inline_refs(value, defs)
             for key, value in node.items()
-            if key not in {"title", "$defs"}
+            if key != "$defs" and not (key == "title" and isinstance(value, str))
         }
     if isinstance(node, list):
         return [_inline_refs(item, defs) for item in node]
@@ -123,6 +124,58 @@ def extract_json(text: str) -> Any:
     raise ValueError("no JSON object found in model output")
 
 
+def example_for(schema: JsonSchema) -> Any:
+    """A placeholder instance of a (flat) JSON schema; small models copy shapes well."""
+    kind = schema.get("type")
+    if "enum" in schema:
+        return schema["enum"][0]
+    if "anyOf" in schema:
+        options = [s for s in schema["anyOf"] if s.get("type") != "null"]
+        return example_for(options[0]) if options else None
+    if kind == "object":
+        return {key: example_for(sub) for key, sub in schema.get("properties", {}).items()}
+    if kind == "array":
+        return [example_for(schema.get("items", {}))]
+    if kind == "boolean":
+        return True
+    if kind in {"integer", "number"}:
+        return 0
+    if "default" in schema and isinstance(schema["default"], str) and schema["default"]:
+        return schema["default"]
+    if schema.get("description"):
+        return f"<{schema['description']}>"
+    return "..."
+
+
+def field_notes(schema: JsonSchema) -> str:
+    """One line per field with its description and length limit, when there are any."""
+    lines = []
+    for key, sub in schema.get("properties", {}).items():
+        parts = []
+        if sub.get("description"):
+            parts.append(str(sub["description"]))
+        if sub.get("maxItems"):
+            parts.append(f"at most {sub['maxItems']} items")
+        if sub.get("maxLength"):
+            parts.append(f"at most {sub['maxLength']} characters")
+        if parts:
+            lines.append(f"- {key}: {'; '.join(parts)}")
+    return ("\nFields:\n" + "\n".join(lines)) if lines else ""
+
+
+def unwrap(data: Any, schema: JsonSchema) -> Any:
+    """Recover an answer a model nested inside a copy of the schema's ``properties``."""
+    required = set(schema.get("required", []))
+    if not isinstance(data, dict) or not required or required <= set(data):
+        return data
+    nested = data.get("properties")
+    if isinstance(nested, dict) and required <= set(nested):
+        values = list(nested.values())
+        if not all(isinstance(v, dict) and "type" in v for v in values):  # not a bare schema
+            return nested
+    return data
+
+
 def _validation_message(exc: Exception) -> str:
     if isinstance(exc, ValidationError):
         parts = [
@@ -144,8 +197,9 @@ def generate_structured[T: BaseModel](
 ) -> StructuredResult[T]:
     json_schema = schema_for(schema)
     instructions = (
-        f"{system}\nReply with one JSON object only, matching this JSON Schema:\n"
-        f"{json.dumps(json_schema, ensure_ascii=False, separators=(',', ':'))}"
+        f"{system}\nReply with one JSON object only, shaped like this example "
+        f"(replace the placeholder values):\n"
+        f"{json.dumps(example_for(json_schema), ensure_ascii=False)}" + field_notes(json_schema)
     )
     messages = [Message("system", instructions), Message("user", user, images=images)]
     error: str | None = None
@@ -161,7 +215,7 @@ def generate_structured[T: BaseModel](
         seconds += response.seconds
         constrained = response.constrained
         try:
-            value = schema.model_validate(extract_json(response.text))
+            value = schema.model_validate(unwrap(extract_json(response.text), json_schema))
         except (ValueError, ValidationError) as exc:
             error = _validation_message(exc)
             log.info("role=%s attempt=%d invalid output: %s", client.role, attempt, error)

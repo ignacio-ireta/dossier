@@ -196,11 +196,30 @@ def run_all(terms: list[tuple[str, Pattern[str]]]) -> Iterator[Finding]:
 
 
 def run_history(terms: list[tuple[str, Pattern[str]]]) -> Iterator[Finding]:
+    """Commit metadata and messages, then every blob ever committed (zips unpacked)."""
     try:
-        log = git("log", "--all", "-p", "--text", "--format=commit %H%n%an <%ae>%n%cn <%ce>%n%B")
+        meta = git("log", "--all", "--format=commit %H%n%an <%ae>%n%cn <%ce>%n%B")
     except subprocess.CalledProcessError:
         return  # no commits yet
-    yield from scan_text("git history", log.decode("utf-8", errors="replace"), terms)
+    yield from scan_text("git metadata", meta.decode("utf-8", errors="replace"), terms)
+    listing = git("rev-list", "--all", "--objects").decode("utf-8", errors="replace")
+    named: dict[str, str] = {}
+    for line in listing.splitlines():
+        sha, _, path = line.partition(" ")
+        if path and sha not in named:
+            named[sha] = path
+    if not named:
+        return
+    checked = subprocess.run(
+        ["git", "cat-file", "--batch-check=%(objecttype) %(objectname)"],
+        input="\n".join(named).encode(), capture_output=True, check=True,
+    ).stdout.decode()
+    for row in checked.splitlines():
+        kind, _, sha = row.partition(" ")
+        if kind == "blob":
+            data = git("cat-file", "blob", sha)
+            if len(data) <= MAX_BYTES:
+                yield from scan_blob(f"history:{named[sha]}@{sha[:8]}", data, terms)
 
 
 def report(findings: Iterable[Finding]) -> int:

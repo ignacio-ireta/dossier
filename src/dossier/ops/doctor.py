@@ -45,6 +45,7 @@ class Check:
 _EXTRAS = (
     ("embed", "sqlite_vec", "vector search"),
     ("mcp", "mcp", "MCP server"),
+    ("meet", "pyannote", "meetings: transcription and diarization"),
     ("cloud", "anthropic", "Anthropic provider"),
 )
 

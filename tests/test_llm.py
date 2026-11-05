@@ -42,6 +42,7 @@ def test_schema_is_flat() -> None:
     schema = schema_for(Card)
     text = json.dumps(schema)
     assert "$ref" not in text and "$defs" not in text and '"title": "' not in text
+    assert "title" in schema["properties"]  # a field named "title" survives
     assert schema["additionalProperties"] is False
     assert "label" in text
 
@@ -144,3 +145,30 @@ def test_budget_helpers() -> None:
     assert [i for w in windows for i in w] == list(range(len(pieces)))
     huge = split_text("a" * 5000, 100)
     assert all(len(p) <= 320 for p in huge)
+
+
+def test_prompt_shows_example_not_schema(workspace: Workspace) -> None:
+    from dossier.llm.structured import example_for, unwrap
+
+    provider = FakeProvider(script=['{"title": "x"}'])
+    client = _router(workspace.config, provider).client("index")
+    generate_structured(client, system="s", user="u", schema=Card, fallback=lambda: Card(title="f"))
+    system = provider.calls[0]["messages"][0].content
+    assert '{"title": "...", "tags": ["..."], "inner": {"label": "..."}}' in system
+    assert "- title: at most 40 characters" in system
+    assert example_for({"type": "object", "properties": {"n": {"type": "integer"}}}) == {"n": 0}
+    schema = schema_for(Card)
+    echoed = {"type": "object", "properties": {"title": "Budget", "tags": []}}
+    assert unwrap(echoed, schema) == {"title": "Budget", "tags": []}
+    bare = {"type": "object", "properties": {"title": {"type": "string"}}}
+    assert unwrap(bare, schema) is bare
+
+
+def test_echoed_schema_answer_is_recovered(workspace: Workspace) -> None:
+    reply = '{"type": "object", "properties": {"title": "Recovered", "tags": ["a"]}}'
+    provider = FakeProvider(script=[reply])
+    client = _router(workspace.config, provider).client("index")
+    result = generate_structured(
+        client, system="s", user="u", schema=Card, fallback=lambda: Card(title="fallback")
+    )
+    assert result.outcome is Outcome.OK and result.value.title == "Recovered"

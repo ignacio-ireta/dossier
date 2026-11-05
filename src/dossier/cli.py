@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -12,6 +15,7 @@ from rich.table import Table
 
 from dossier import __version__
 from dossier.commands import agent as agent_commands
+from dossier.commands import common
 from dossier.commands import corpus as corpus_commands
 from dossier.commands import docs as docs_commands
 from dossier.commands import knowledge as knowledge_commands
@@ -335,13 +339,38 @@ meet_commands.register(app)
 docs_commands.register(app)
 
 
+@contextmanager
+def _json_stdout() -> Iterator[None]:
+    """In --json mode keep stdout for the JSON result only.
+
+    Native libraries (speech models, downloaders) may write to file descriptor 1,
+    which would corrupt the JSON an agent parses, so fd 1 points at stderr while
+    the command runs and the result goes to a saved copy of the real stdout.
+    """
+    sys.stdout.flush()
+    saved = os.dup(1)
+    os.dup2(2, 1)
+    common.json_stream = os.fdopen(saved, "w", encoding="utf-8", closefd=True)
+    try:
+        yield
+    finally:
+        sys.stdout.flush()
+        common.json_stream.flush()
+        os.dup2(saved, 1)
+        common.json_stream.close()
+        common.json_stream = None
+
+
 def main() -> None:
     """Entry point. Click handles usage errors and exits; dossier errors map to exit codes."""
-    try:
-        app()
-    except DossierError as exc:
-        if "--json" in sys.argv:
-            sys.stdout.write(json.dumps({"error": exc.as_dict()}, indent=2) + "\n")
-        else:
-            err_console.print(f"[red]error[/red] [{exc.code}] {exc.message}")
-        raise SystemExit(exc.exit_status) from None
+    guard = "--json" in sys.argv and "mcp" not in sys.argv
+    with _json_stdout() if guard else nullcontext():
+        try:
+            app()
+        except DossierError as exc:
+            if "--json" in sys.argv:
+                stream = common.json_stream or sys.stdout
+                stream.write(json.dumps({"error": exc.as_dict()}, indent=2) + "\n")
+            else:
+                err_console.print(f"[red]error[/red] [{exc.code}] {exc.message}")
+            raise SystemExit(exc.exit_status) from None

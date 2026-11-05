@@ -68,3 +68,37 @@ def test_office_files_are_scanned(denylist: ModuleType) -> None:
 def test_cli_exit_codes(denylist: ModuleType) -> None:
     assert denylist.main(["--text", "clean text"]) == 0
     assert denylist.main(["--text", "Falcon Corp"]) == 1
+
+
+def test_history_scans_committed_office_files(
+    denylist: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.chdir(repo)
+    env = {
+        "GIT_AUTHOR_NAME": "Tester",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "Tester",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+    }
+    monkeypatch.setattr("os.environ", {**__import__("os").environ, **env})
+    subprocess.run(["git", "init", "-q"], check=True)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("word/document.xml", "<w:t>Prepared for Falcon Corp</w:t>")
+    (repo / "report.docx").write_bytes(buffer.getvalue())
+    (repo / "noise.bin").write_bytes(bytes(range(256)) * 4 + b"\x00PRJ-77\x00")
+    subprocess.run(["git", "add", "."], check=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "add files", "--no-verify"],
+        check=True,
+        env={**__import__("os").environ, **env},
+    )
+    terms = denylist.load_terms(denylist.denylist_path())
+    findings = list(denylist.run_history(terms))
+    labels = [label for label, _line, _msg in findings]
+    assert any("report.docx" in label and "word/document.xml" in label for label in labels)
+    assert not any("noise.bin" in label for label in labels)  # binary, not text

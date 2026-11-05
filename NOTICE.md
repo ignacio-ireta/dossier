@@ -14,5 +14,8 @@ MIT-licensed. Modules derived from them, and what they derive from:
 
 Project-specific vocabularies, glossaries, templates and test material in those
 tools were not carried over. Slide decks are rendered by pandoc from a template's
-layouts rather than by porting the earlier deck-cloning tool. dossier ships only generic code, a neutral template
-pack, and synthetic test fixtures.
+layouts rather than by porting the earlier deck-cloning tool. dossier ships only
+generic code, a neutral template pack, and synthetic test fixtures.
+
+Third-party libraries are used under their own licenses. Libraries under
+copyleft licenses (for example PyMuPDF, extract-msg) were deliberately avoided.

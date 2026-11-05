@@ -40,7 +40,7 @@ def test_cards_folders_and_overview(indexed: Workspace, fake_model: FakeProvider
     assert {d["doc"] for d in data["documents"]} == set(manifest.docs)
     for call in fake_model.calls:
         system = call["messages"][0].content
-        assert "JSON Schema" in system and call["think"] is False
+        assert "shaped like this example" in system and call["think"] is False
 
 
 def test_incremental_index(indexed: Workspace, fake_model: FakeProvider) -> None:

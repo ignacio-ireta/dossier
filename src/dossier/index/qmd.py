@@ -28,6 +28,7 @@ from dossier.index.search import Hit
 from dossier.ops.tools import tool
 
 INSTALL_HINT = "bun install -g @tobilu/qmd   (bun: brew install bun)"
+MEETINGS = "meetings"  # meetings get their own qmd collection
 _HUNK = re.compile(r"@@ -(\d+)(?:,(\d+))? @@[^\n]*\n?")
 
 Runner = Callable[[list[str]], subprocess.CompletedProcess[str]]
@@ -57,7 +58,10 @@ class Qmd:
         return f"dossier-{slug or 'workspace'}-{sha256_text(str(self.workspace.root))[:6]}"
 
     def collection(self, source: str) -> str:
-        return f"{self.index_name}-{source}"
+        # A double dash keeps the meetings collection apart from a source named "meetings".
+        return (
+            f"{self.index_name}--{source}" if source == MEETINGS else f"{self.index_name}-{source}"
+        )
 
     def _run(self, *args: str) -> str:
         if not self.executable:
@@ -85,9 +89,17 @@ class Qmd:
             if root_state and root_state.one_line:
                 self._run("context", "add", f"qmd://{name}", root_state.one_line)
                 contexts += 1
+        meetings = self.workspace.paths.meetings
+        known = {source.name for source in self.workspace.config.sources}
+        if any(meetings.glob("*/summary.md")):
+            name = self.collection(MEETINGS)
+            if name not in existing:
+                self._run("collection", "add", str(meetings), "--name", name, "--mask", "**/*.md")
+                collections += 1
+            known.add(MEETINGS)
         for key, state in manifest.folders.items():
             source_name, _, sub = key.partition("/")
-            if not sub or not state.one_line:
+            if not sub or not state.one_line or source_name not in known:
                 continue
             target = f"qmd://{self.collection(source_name)}/{sub}"
             self._run("context", "add", target, state.one_line)
@@ -112,8 +124,17 @@ class Qmd:
             path = raw.removeprefix("qmd://").split("?", 1)[0].split("#", 1)[0]
             collection, _, relative = path.partition("/")
             source = collection.removeprefix(prefix)
+            if source == f"-{MEETINGS}":
+                source = MEETINGS
             doc_rel = relative.removesuffix(".md")
             doc = f"{source}/{doc_rel}" if relative else path
+            corpus = (
+                f"meetings/{relative}"
+                if source == MEETINGS
+                else f"corpus/{source}/{relative}"
+                if relative
+                else ""
+            )
             snippet = str(row.get("snippet") or "")
             lines = ""
             hunk = _HUNK.match(snippet)
@@ -134,7 +155,7 @@ class Qmd:
                     heading="",
                     lines=lines,
                     snippet=re.sub(r"\s+", " ", snippet).strip()[:300],
-                    corpus=f"corpus/{source}/{relative}" if relative else "",
+                    corpus=corpus,
                     card=f"index/cards/{doc}.card.md",
                     matched_by="qmd",
                 )

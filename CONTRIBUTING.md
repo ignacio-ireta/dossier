@@ -36,7 +36,19 @@ python3 scripts/denylist.py --history
 
 ```bash
 uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest
+uv run python tests/e2e.py --workdir /tmp/dossier-e2e    # real tools and models
 ```
 
 Tests marked `live_model` need a running local model server; deselect them with
-`-m "not live_model"`.
+`-m "not live_model"`. Tests that need a system tool (ffmpeg, pandoc, typst,
+mmdc, draw.io, LibreOffice) skip when it is missing. `tests/e2e.py` drives the
+installed `dsr` end to end (documents, a synthetic two-voice meeting, rendering,
+MCP over stdio) and needs Ollama with the default models.
+
+## The neutral template pack
+
+`src/dossier/docs/packs/neutral/` is generated, not hand-edited:
+
+```bash
+uv run python scripts/build_neutral_pack.py
+```

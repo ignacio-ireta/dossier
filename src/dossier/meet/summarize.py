@@ -14,6 +14,7 @@ Owners and due dates are kept only as stated; anything else becomes UNKNOWN.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 
@@ -26,6 +27,7 @@ from dossier.llm.structured import Outcome, generate_structured
 from dossier.meet.models import SpeakerInfo, Turn, clock, parse_clock
 
 _OVERHEAD = 900
+log = logging.getLogger("dossier.meet")
 _UNKNOWN = "UNKNOWN"
 
 
@@ -91,11 +93,11 @@ def transcript_lines(turns: list[Turn], speakers: dict[str, SpeakerInfo]) -> lis
 
 def _valid_time(value: str, turns: list[Turn], start: float, end: float) -> float | None:
     seconds = parse_clock(value)
-    if seconds is None or not start - 1 <= seconds <= end + 1:
-        return None
-    for turn in turns:
-        if turn.start - 1 <= seconds <= turn.end + 1:
-            return seconds
+    if seconds is not None and start - 1 <= seconds <= end + 1:
+        for turn in turns:
+            if turn.start - 1 <= seconds <= turn.end + 1:
+                return seconds
+    log.info("dropped an item with an unverifiable time %r", value[:16])
     return None
 
 
