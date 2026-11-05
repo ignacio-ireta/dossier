@@ -23,7 +23,7 @@ Recordings dropped into a source folder are transcribed automatically by
 | `brief.md` | Written by `dsr meet brief`: summary items, slides, related documents |
 | `deck.md` | Text of the slides shown, when `--deck` was given |
 | `meeting.json` | Title, date, speakers, models used, stage status |
-| `machine/` | Words with timestamps, diarization, turns, `.srt`, `.vtt` |
+| `machine/` | Words as heard (`words.json`), diarization, turns after glossary fixes, `.srt`, `.vtt` |
 
 Transcripts and summaries are indexed like documents: search them with
 `dsr search "..." --kind meeting`, and agents get the MCP tools `meetings`,
@@ -34,17 +34,22 @@ Transcripts and summaries are indexed like documents: search them with
 1. **Audio**: ffmpeg converts any audio or video (m4a, mp3, wav, aac, flac,
    ogg/opus, webm, mp4, mov, mkv...) to 16 kHz mono with loudness normalization.
 2. **Speech recognition**: MLX Whisper on Apple Silicon, faster-whisper
-   elsewhere (`[meet] asr_backend`, `asr_model`). Word timestamps are kept.
+   elsewhere (`[meet] asr_backend`, `asr_model`), with the glossary's terms as
+   a hint. Word timestamps are kept.
 3. **Diarization**: pyannote splits the audio by speaker and gives each speaker
    a voice embedding.
-4. **Speakers**: labels (`SPEAKER_00`, ...) until a person confirms names.
+4. **Speakers**: the glossary's replacements fix known mishearings, then words
+   are assigned to speakers. Speakers keep labels (`SPEAKER_00`, ...) until a
+   person confirms names.
 5. **Summary**: the `meet` model reads the transcript in windows that fit its
    context. Each window yields a short summary plus the decisions, actions and
    open questions stated in it, each with the time it is said. A last call writes
    the overview.
 
 Stages resume: re-running `dsr meet add` on the same recording only does what
-is missing. `--force asr` re-runs a stage and everything after it.
+is missing. `--force asr` re-runs a stage and everything after it; after
+editing the glossary's replacements, `--force assign` applies them without
+transcribing again (new `terms` need `--force asr`).
 
 ## Summary guarantees
 
@@ -82,19 +87,40 @@ biometric data: they are off by default, stored only in this workspace's
 
 ## Glossary
 
-Point `[meet] glossary` at a TOML file:
+Point `[meet] glossary` at a TOML file (one per workspace, so each account
+keeps its own vocabulary):
 
 ```toml
-terms = ["Lakehouse", "DataOps", "Falcon"]
+terms = ["Lakehouse", "DataOps", "Falcon"]   # spelled as they should appear
 
-[replacements]
+[replacements]                               # heard -> correct, for every meeting
 "data ops" = "DataOps"
 "lake house" = "Lakehouse"
+
+[es]                                         # only for meetings in Spanish
+terms = ["facturación electrónica"]
+[es.replacements]
+"cuberneti" = "Kubernetes"
+"comité de dirección" = "Comité de Dirección"
 ```
 
-Terms bias recognition (Whisper's initial prompt); replacements fix frequent
-mishearings afterwards. `dsr meet eval <id>` scores a transcript against the
-glossary: `100 * term recall - 5 * mishearings - 0.5 * words in repetition loops`.
+- **Terms** bias recognition: they go into Whisper's initial prompt, labelled
+  in the meeting's language ("Glossary: ...", "Glosario: ..."). The prompt is
+  limited to about 800 characters, so list the words that are actually
+  misheard: product and system names, acronyms, people's and places' names,
+  words from another language.
+- **Replacements** fix known mishearings after recognition. They ignore case,
+  match whole words, and may span several words: `"data ops"` becomes one word
+  `DataOps` that keeps the timing of both. Keys are what Whisper wrote, values
+  the correct form.
+- **Language tables** (`[es]`, `[en]`, any language code) add terms and
+  replacements used only for meetings in that language; on a conflict they win
+  over the shared ones. Mishearings differ by language, so a term often needs a
+  different fix in each.
+
+`dsr meet eval <id>` scores a transcript against the glossary (with the
+meeting's language table): `100 * term recall - 5 * mishearings - 0.5 * words
+in repetition loops`. Use it to see which terms are still missed.
 
 ## Diarization model
 

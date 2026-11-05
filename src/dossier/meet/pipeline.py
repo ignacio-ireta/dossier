@@ -7,6 +7,10 @@ and a changed stage re-runs it and everything after it):
 
 A meeting is identified by the content hash of its recording: the same file
 added twice (or moved) is the same meeting.
+
+Glossary replacements are applied in ``assign``, so ``machine/words.json``
+keeps what the recognizer heard and a changed glossary only needs
+``--force assign``.
 """
 
 from __future__ import annotations
@@ -53,7 +57,7 @@ STAGES: dict[str, int] = {
     "audio": 1,
     "asr": 1,
     "diarize": 1,
-    "assign": 1,
+    "assign": 2,  # 2: glossary replacements applied here, across words
     "identify": 1,
     "deck": 1,
     "summarize": 1,
@@ -220,7 +224,7 @@ def process_recording(
     save_record(folder, record)
     _register(workspace, sha, record.id)
     engines = engines or default_engines(workspace, diarize=options.diarize)
-    glossary = Glossary.load(
+    glossaries = Glossary.load(
         workspace.paths.resolve(settings.glossary) if settings.glossary else None
     )
     wav = machine / "audio.wav"
@@ -258,8 +262,11 @@ def process_recording(
             record.duration_s = round(normalize(source, wav), 2)
             finish("audio")
         if asr_needed:
-            words = engines.asr.transcribe(wav, language=record.language, prompt=glossary.prompt())
-            words = [w.model_copy(update={"text": glossary.apply(w.text)}) for w in words]
+            words = engines.asr.transcribe(
+                wav,
+                language=record.language,
+                prompt=glossaries.for_language(record.language).prompt(record.language),
+            )
             atomic_write_json(machine / "words.json", [w.model_dump() for w in words])
             record.asr = f"{engines.asr.name}:{engines.asr.model_id}"
             finish("asr", detail=f"{len(words)} words")
@@ -281,6 +288,7 @@ def process_recording(
             embeddings=diar_data.get("embeddings", {}),
         )
         if needed("assign"):
+            words = glossaries.for_language(record.language).apply_words(words)
             turns = to_turns(assign(words, diar.segments))
             atomic_write_json(machine / "turns.json", [t.model_dump() for t in turns])
             table = speaker_table(diar.segments, turns)

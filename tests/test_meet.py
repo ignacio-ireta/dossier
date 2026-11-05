@@ -152,12 +152,89 @@ def test_glossary_prompt_and_replacements(approved: Workspace, tmp_path: Path) -
         workspace, _wav(tmp_path / "x.wav"), engines=Engines(asr, FakeDiarizer())
     )
     assert asr.prompts[0] == "Glossary: Lakeside, DataOps."
-    words = json.loads(
-        (workspace.paths.meetings / record.id / "machine" / "words.json").read_text()
-    )
-    assert "Lakeside Region" not in " ".join(w["text"] for w in words)  # word-level, see below
+    machine = workspace.paths.meetings / record.id / "machine"
+    words = json.loads((machine / "words.json").read_text())
+    assert "Lakeside Region" not in " ".join(w["text"] for w in words)  # what was heard
+    turns = json.loads((machine / "turns.json").read_text())
+    assert any("We keep the Lakeside Region for hosting." in t["text"] for t in turns)
+    transcript = (workspace.paths.meetings / record.id / "transcript.md").read_text()
+    assert "Lakeside Region" in transcript and "Lakeside region" not in transcript
     glossary = Glossary.load(workspace.root / "glossary.toml")
-    assert glossary.apply("we keep the LAKESIDE REGION") == "we keep the Lakeside Region"
+    assert glossary.apply("we keep the LAKESIDE  REGION") == "we keep the Lakeside Region"
+    # A changed glossary only needs the assign stage, not a new transcription.
+    (workspace.root / "glossary.toml").write_text(
+        'terms = ["Lakeside"]\n[replacements]\n"lakeside region" = "Lakeside Zone"\n'
+    )
+    process_recording(
+        workspace,
+        _wav(tmp_path / "x.wav"),
+        MeetOptions(force={"assign"}),
+        engines=Engines(asr, FakeDiarizer()),
+    )
+    assert asr.calls == 1
+    assert "Lakeside Zone" in (workspace.paths.meetings / record.id / "transcript.md").read_text()
+
+
+def _words(*items: tuple[str, float | None]) -> list[Word]:
+    return [
+        Word(start=i, end=i + 0.8, text=text, confidence=conf)
+        for i, (text, conf) in enumerate(items)
+    ]
+
+
+def test_glossary_replacements_span_words_and_keep_timings() -> None:
+    glossary = Glossary(
+        replacements={"data ops": "DataOps", "lake house": "Lakehouse", "cuberneti": "Kubernetes"}
+    )
+    words = _words(
+        ("We", 0.9),
+        ("use", 0.9),
+        ("(Data", 0.8),
+        ("ops),", 0.6),
+        ("a", 0.9),
+        ("lake", None),
+        ("house", 0.7),
+        ("and", 0.9),
+        ("cuberneti.", 0.5),
+    )
+    fixed = glossary.apply_words(words)
+    assert [w.text for w in fixed] == [
+        "We",
+        "use",
+        "(DataOps),",
+        "a",
+        "Lakehouse",
+        "and",
+        "Kubernetes.",
+    ]
+    merged = fixed[2]
+    assert (merged.start, merged.end, merged.confidence) == (2.0, 3.8, 0.6)
+    assert (fixed[4].start, fixed[4].end, fixed[4].confidence) == (5.0, 6.8, 0.7)
+    assert glossary.apply_words(_words(("data", None), ("opsy", None)))[1].text == "opsy"
+    assert Glossary().apply_words(words) == words
+
+
+def test_glossary_language_sections(tmp_path: Path) -> None:
+    path = tmp_path / "glossary.toml"
+    path.write_text(
+        'terms = ["DataOps"]\n[replacements]\n"data ops" = "DataOps"\n'
+        '"lake house" = "Lakehouse"\n'
+        '[es]\nterms = ["facturación"]\n[es.replacements]\n"cuberneti" = "Kubernetes"\n'
+        '"lake house" = "Lake House"\n',
+        encoding="utf-8",
+    )
+    glossary = Glossary.load(path)
+    spanish = glossary.for_language("es")
+    assert spanish.terms == ["facturación", "DataOps"]
+    assert spanish.prompt("es") == "Glosario: facturación, DataOps."
+    assert spanish.apply("el lake house y cuberneti") == "el Lake House y Kubernetes"
+    english = glossary.for_language("en")
+    assert english.prompt("en") == "Glossary: DataOps."
+    assert english.apply("cuberneti lake house") == "cuberneti Lakehouse"
+    assert glossary.for_language("ja").prompt("ja") == "DataOps."  # no label for this one
+    path.write_text('terms = []\n[spanish_terms]\nterms = ["x"]\n', encoding="utf-8")
+    with pytest.raises(DossierError, match="unknown table"):
+        Glossary.load(path)
 
 
 def test_speaker_assignment_and_turns() -> None:

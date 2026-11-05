@@ -201,19 +201,24 @@ def register(app: typer.Typer) -> None:
         """Score a transcript: glossary terms, known mishearings, hallucination loops."""
         from dossier.meet.eval import score
         from dossier.meet.glossary import Glossary
-        from dossier.meet.pipeline import resolve_meeting
+        from dossier.meet.pipeline import load_record, resolve_meeting
 
         state = get_state(ctx)
         workspace = state.maybe_workspace()
         path = Path(target)
+        language: str | None = None
         if not path.is_file():
             if workspace is None:
                 raise DossierError(f"{target} is not a file and there is no workspace")
-            path = resolve_meeting(workspace, target) / "transcript.md"
+            folder = resolve_meeting(workspace, target)
+            path = folder / "transcript.md"
+            language = load_record(folder).language
         glossary_path = glossary
         if glossary_path is None and workspace is not None and workspace.config.meet.glossary:
             glossary_path = workspace.paths.resolve(workspace.config.meet.glossary)
-        result = score(path.read_text(encoding="utf-8"), Glossary.load(glossary_path))
+        result = score(
+            path.read_text(encoding="utf-8"), Glossary.load(glossary_path).for_language(language)
+        )
         if state.json:
             emit(state, result.as_dict())
             return
