@@ -51,6 +51,7 @@ def test_builtin_rules(denylist: ModuleType) -> None:
     assert any("home path" in m for m in _messages(denylist, SAMPLE_MAC_HOME))
     assert any("home path" in m for m in _messages(denylist, SAMPLE_WIN_HOME))
     assert not _messages(denylist, "/Users/you/file and /home/user/x")
+    assert not _messages(denylist, "+@pytest.fixture and +@app.command()")  # diff lines
     assert not _messages(denylist, "Falcon Corp mention  # denylist-ok")
 
 

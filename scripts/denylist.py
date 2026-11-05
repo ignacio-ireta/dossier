@@ -67,7 +67,11 @@ PLACEHOLDER_USERS = {
     "tmp",
 }
 
-EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)")
+# The local part must contain a letter or digit, so a diff line such as
+# "+@pytest.fixture" is not mistaken for an address.
+EMAIL = re.compile(
+    r"[A-Za-z0-9._%+-]*[A-Za-z0-9][A-Za-z0-9._%+-]*@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)"
+)
 HOME_PATH = re.compile(r"(?:/Users/|/home/|[A-Za-z]:\\+Users\\+)([A-Za-z0-9._-]+)")
 SKIP_MARK = "denylist-ok"
 MAX_BYTES = 20 * 1024 * 1024
