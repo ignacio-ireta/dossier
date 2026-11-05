@@ -13,8 +13,9 @@ allows a named external provider.
 
 > Status: early development. Working today: workspace setup, policy, model
 > routing, diagnostics, the corpus (conversion, incremental sync, scheduling),
-> and the index (cards, folder summaries, TREE/INDEX, hybrid search, qmd).
-> Agent access, meetings and documents are being added milestone by milestone.
+> the index (cards, folder summaries, TREE/INDEX, hybrid search, qmd), and agent
+> access (MCP server, AGENTS.md/llms.txt, Claude Code skill). Meetings and
+> documents are being added milestone by milestone.
 
 ## Install (macOS)
 
@@ -39,7 +40,8 @@ dsr schedule install --at 07:30   # keep it current automatically
 ```
 
 See [docs/corpus.md](docs/corpus.md) for what each file type becomes and
-[docs/index.md](docs/index.md) for cards, folder summaries and search.
+[docs/index.md](docs/index.md) for cards, folder summaries and search, and
+[docs/agents.md](docs/agents.md) for the MCP server and agent files.
 
 ## Concepts
 

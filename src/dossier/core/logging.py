@@ -13,6 +13,7 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
+from rich.console import Console
 from rich.logging import RichHandler
 
 _FILE_HANDLER_NAME = "dossier-file"
@@ -36,7 +37,10 @@ def configure(level: str = "WARNING", *, log_dir: Path | None = None) -> None:
     root.setLevel(logging.DEBUG)
     root.propagate = False
     if not any(isinstance(handler, RichHandler) for handler in root.handlers):
-        console = RichHandler(show_path=False, rich_tracebacks=False, markup=False)
+        # stderr, always: stdout carries command output and the MCP stdio stream.
+        console = RichHandler(
+            console=Console(stderr=True), show_path=False, rich_tracebacks=False, markup=False
+        )
         console.setLevel(level.upper())
         root.addHandler(console)
     else:

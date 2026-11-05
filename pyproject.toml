@@ -55,7 +55,7 @@ packages = ["src/dossier"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "src/dossier", "templates", "skills", "docs", "scripts",
+    "src/dossier", "docs", "scripts",
     "README.md", "CONTRIBUTING.md", "LICENSE", "NOTICE.md", "Brewfile",
 ]
 
@@ -83,3 +83,8 @@ addopts = "-q"
 markers = [
     "live_model: needs a running local model server (deselect with -m 'not live_model')",
 ]
+
+[[tool.mypy.overrides]]
+# Tools are registered through the MCP SDK's decorator on a runtime subclass.
+module = ["dossier.agent.mcp_server"]
+disallow_untyped_decorators = false

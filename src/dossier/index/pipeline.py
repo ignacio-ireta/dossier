@@ -316,6 +316,9 @@ def run_index(
     save_manifest(paths, manifest)
     write_folder_pages(paths, folders, states)
     write_overview(paths, config, docs, folders, states, changed=result.changed, run_id=run_id)
+    from dossier.agent.navigation import write_navigation
+
+    write_navigation(workspace)
     result.counts.update(
         {
             "cards_created": created,
