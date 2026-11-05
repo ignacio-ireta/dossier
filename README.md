@@ -14,9 +14,9 @@ allows a named external provider.
 > Status: early development. Working today: workspace setup, policy, model
 > routing, diagnostics, the corpus (conversion, incremental sync, scheduling),
 > the index (cards, folder summaries, TREE/INDEX, hybrid search, qmd), agent
-> access (MCP server, AGENTS.md/llms.txt, Claude Code skill), and meetings
-> (transcription, diarization, speaker suggestions, summaries and actions).
-> Document rendering is being added.
+> access (MCP server, AGENTS.md/llms.txt, Claude Code skill), meetings
+> (transcription, diarization, speaker suggestions, summaries and actions), and
+> documents (DOCX/PPTX/PDF from per-account template packs, Mermaid and draw.io).
 
 ## Install (macOS)
 
@@ -43,7 +43,8 @@ dsr schedule install --at 07:30   # keep it current automatically
 See [docs/corpus.md](docs/corpus.md) for what each file type becomes and
 [docs/index.md](docs/index.md) for cards, folder summaries and search, and
 [docs/agents.md](docs/agents.md) for the MCP server and agent files, and
-[docs/meetings.md](docs/meetings.md) for recordings.
+[docs/meetings.md](docs/meetings.md) for recordings, and
+[docs/documents.md](docs/documents.md) for rendering and template packs.
 
 ## Concepts
 

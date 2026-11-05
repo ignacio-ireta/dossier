@@ -10,8 +10,9 @@ MIT-licensed. Modules derived from them, and what they derive from:
 | `dossier.index` | `knowledge-index` |
 | `dossier.llm` | `knowledge-index`, `meeting-context` |
 | `dossier.meet` | `meeting-transcription`, `meeting-context` |
-| `dossier.docs` | `markdown-docx-styler`, `md2pptx` |
+| `dossier.docs` | `markdown-docx-styler` (table of contents, tokens) |
 
 Project-specific vocabularies, glossaries, templates and test material in those
-tools were not carried over. dossier ships only generic code, a neutral template
+tools were not carried over. Slide decks are rendered by pandoc from a template's
+layouts rather than by porting the earlier deck-cloning tool. dossier ships only generic code, a neutral template
 pack, and synthetic test fixtures.

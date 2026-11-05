@@ -13,6 +13,7 @@ from rich.table import Table
 from dossier import __version__
 from dossier.commands import agent as agent_commands
 from dossier.commands import corpus as corpus_commands
+from dossier.commands import docs as docs_commands
 from dossier.commands import knowledge as knowledge_commands
 from dossier.commands import meet as meet_commands
 from dossier.commands.common import State, console, emit, err_console, get_state
@@ -331,6 +332,7 @@ corpus_commands.register(app)
 knowledge_commands.register(app, models_app)
 agent_commands.register(app)
 meet_commands.register(app)
+docs_commands.register(app)
 
 
 def main() -> None:

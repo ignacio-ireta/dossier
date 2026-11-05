@@ -61,6 +61,20 @@ TOOLS: tuple[ExternalTool, ...] = (
         other_install="npm install -g @mermaid-js/mermaid-cli",
     ),
     ExternalTool(
+        "browser",
+        ("chromium", "chromium-browser", "google-chrome", "chrome", "msedge"),
+        ("docs",),
+        "headless browser for Mermaid (Chrome, Chromium, Edge or Brave)",
+        other_install="npx puppeteer browsers install chrome-headless-shell",
+        mac_app_paths=(
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        ),
+        optional=True,
+    ),
+    ExternalTool(
         "drawio",
         ("drawio", "draw.io"),
         ("docs",),

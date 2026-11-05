@@ -187,6 +187,7 @@ def build_server(workspace_path: Path | None = None) -> Any:
         )
 
     importlib.import_module("dossier.meet.mcp_tools")  # registers the meeting tools
+    importlib.import_module("dossier.docs.mcp_tools")  # registers template/render tools
     for extension in EXTENSIONS:
         extension(server, get_workspace)
     return server

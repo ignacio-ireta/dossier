@@ -1,0 +1,19 @@
+# Built-in neutral pack. Copy it with `dsr templates new <name> --extends neutral`.
+name = "neutral"
+version = "1"
+description = "Plain, brand-free documents and decks."
+default_kind = "report"
+
+[kinds.report]
+docx = "report/reference.docx"
+pptx = "deck/template.pptx"
+pdf_theme = "pdf/theme.typ"
+toc = true
+
+[kinds.memo]
+docx = "report/reference.docx"
+pdf_theme = "pdf/theme.typ"
+toc = false
+
+[kinds.deck]
+pptx = "deck/template.pptx"
