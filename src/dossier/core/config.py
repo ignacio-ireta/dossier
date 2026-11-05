@@ -170,9 +170,30 @@ class AgentSection(_Strict):
     allow_render: bool = False
 
 
+class AsrBackendName(StrEnum):
+    AUTO = "auto"  # MLX Whisper on Apple Silicon, otherwise faster-whisper
+    MLX = "mlx"
+    FASTER_WHISPER = "faster-whisper"
+
+
 class MeetSection(_Strict):
-    glossary: str | None = None
-    speaker_voiceprints: bool = False
+    glossary: str | None = Field(
+        default=None, description="Path to glossary.toml (terms and replacements)."
+    )
+    language: str | None = Field(
+        default=None, description="Spoken language code; default: first workspace language."
+    )
+    asr_backend: AsrBackendName = AsrBackendName.AUTO
+    asr_model: str | None = None
+    diarization_model: str = "pyannote/speaker-diarization-community-1"
+    auto_transcribe: bool = Field(
+        default=True, description="Transcribe recordings found in source folders during sync."
+    )
+    keep_audio: bool = False
+    speaker_voiceprints: bool = Field(
+        default=False, description="Opt-in speaker recognition; voiceprints are biometric data."
+    )
+    voiceprint_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
 
 
 class WorkspaceConfig(_Strict):

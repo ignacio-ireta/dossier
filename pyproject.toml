@@ -34,10 +34,21 @@ ocr = ["ocrmac>=1.0.1 ; sys_platform == 'darwin'"]
 embed = ["sqlite-vec>=0.1.6"]
 mcp = ["mcp>=1.6"]
 cloud = ["anthropic>=0.40", "openai>=1.60"]
-all = ["dossier[ocr,embed,mcp,cloud]"]
+meet = [
+    "pyannote.audio>=4.0",
+    "faster-whisper>=1.1",
+    "mlx-whisper>=0.4 ; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "numpy>=1.26",
+]
+all = ["dossier[ocr,embed,mcp,cloud,meet]"]
 
 [project.scripts]
 dsr = "dossier.cli:main"
+
+[tool.uv]
+# Without a floor, the resolver can pair the newest numpy with an ancient numba
+# (pulled in by the Whisper stack) that does not build on Python 3.12.
+constraint-dependencies = ["numba>=0.60"]
 
 [dependency-groups]
 dev = [
@@ -74,7 +85,7 @@ files = ["src"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["ocrmac.*", "sqlite_vec.*", "keyring.*", "olefile.*", "pdfplumber.*", "pypdfium2.*", "openpyxl.*", "docx.*", "pptx.*"]
+module = ["ocrmac.*", "sqlite_vec.*", "keyring.*", "olefile.*", "pdfplumber.*", "pypdfium2.*", "openpyxl.*", "docx.*", "pptx.*", "mlx_whisper.*", "faster_whisper.*", "pyannote.*", "torch.*", "numpy.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -86,5 +97,5 @@ markers = [
 
 [[tool.mypy.overrides]]
 # Tools are registered through the MCP SDK's decorator on a runtime subclass.
-module = ["dossier.agent.mcp_server"]
+module = ["dossier.agent.mcp_server", "dossier.meet.mcp_tools"]
 disallow_untyped_decorators = false

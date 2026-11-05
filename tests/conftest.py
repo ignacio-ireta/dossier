@@ -37,6 +37,30 @@ def workspace(tmp_path: Path) -> Workspace:
 def responder(messages: list[Message], schema: JsonSchema | None) -> str:
     properties = set((schema or {}).get("properties", {}))
     text = messages[-1].content
+    if {"decisions", "actions", "questions"} <= properties:
+        # Meeting window: one valid item of each kind, one with an invented time.
+        return json.dumps(
+            {
+                "summary": "The team reviewed the rollout and assigned the checklist.",
+                "decisions": [
+                    {"text": "Keep the Lakeside region", "at": "00:05"},
+                    {"text": "Invented decision", "at": "59:59"},
+                ],
+                "actions": [
+                    {
+                        "task": "Prepare the migration checklist",
+                        "owner": "Sam",
+                        "due": "Friday",
+                        "at": "00:09",
+                    },
+                    {"task": "Book the venue", "owner": "Jordan", "due": "Monday", "at": "00:09"},
+                ],
+                "questions": [{"text": "Who approves the budget?", "at": "00:13"}],
+                "topics": ["Rollout"],
+            }
+        )
+    if "overview" in properties:
+        return json.dumps({"overview": "A short rollout review.", "topics": ["rollout"]})
     if "one_line" in properties:
         return json.dumps({"one_line": "Folder with project files.", "summary": "Holds files."})
     if "topics" in properties and "summary" in properties:

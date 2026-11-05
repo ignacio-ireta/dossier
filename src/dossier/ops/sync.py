@@ -92,8 +92,22 @@ def _index_stage(ctx: SyncContext) -> dict[str, Any]:
     return {"counts": result.counts, "attention": result.attention}
 
 
-# Ordered registry; the meetings stage registers itself when its extra is present.
-STAGES: dict[str, Stage] = {"convert": _convert_stage, "index": _index_stage}
+def _meetings_stage(ctx: SyncContext) -> dict[str, Any]:
+    from dossier.meet.collect import meetings_stage
+
+    data = meetings_stage(
+        ctx.workspace, dry_run=ctx.options.dry_run, scheduled=ctx.options.scheduled
+    )
+    ctx.attention.extend(data.get("attention", []))
+    return data
+
+
+# Ordered: meetings run before the index so new transcripts are searchable at once.
+STAGES: dict[str, Stage] = {
+    "convert": _convert_stage,
+    "meetings": _meetings_stage,
+    "index": _index_stage,
+}
 
 
 def register_stage(name: str, stage: Stage) -> None:

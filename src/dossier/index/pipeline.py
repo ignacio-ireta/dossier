@@ -175,6 +175,9 @@ def run_index(
     dry_run: bool = False,
     progress: Callable[[str, str], None] | None = None,
 ) -> IndexResult:
+    from dossier.meet.collect import meeting_documents
+
+    register_collector(meeting_documents)
     paths = workspace.paths
     config = workspace.config
     result = IndexResult()

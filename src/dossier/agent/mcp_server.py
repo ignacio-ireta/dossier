@@ -10,6 +10,7 @@ Feature modules add their tools through :data:`EXTENSIONS`.
 from __future__ import annotations
 
 import functools
+import importlib
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -185,6 +186,7 @@ def build_server(workspace_path: Path | None = None) -> Any:
             workspace, doc, lines=lines, max_chars=max(1000, min(max_chars, 200_000))
         )
 
+    importlib.import_module("dossier.meet.mcp_tools")  # registers the meeting tools
     for extension in EXTENSIONS:
         extension(server, get_workspace)
     return server

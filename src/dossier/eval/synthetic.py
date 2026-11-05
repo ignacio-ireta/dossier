@@ -240,3 +240,110 @@ def build_corpus(root: Path) -> list[Fact]:
         "team;members\nPlatform;6\nAnalytics;4\n", encoding="utf-8"
     )
     return list(FACTS)
+
+
+# A short invented meeting between two people. Facts a summary should keep:
+# the decision (Lakeside region), the action (migration checklist, owner Sam,
+# due Friday) and the open question (budget increase approval).
+MEETING_SCRIPT: tuple[tuple[int, str], ...] = (
+    (0, "Good morning everyone. Let's review the Falcon rollout plan for this quarter."),
+    (
+        1,
+        "Thanks. This is Sam from the platform team. The pilot finished last week and the "
+        "two pilot teams are happy with the dashboards.",
+    ),
+    (0, "Great. We agreed that phase two of the rollout starts on the first of March."),
+    (1, "I will prepare the migration checklist by Friday."),
+    (0, "Perfect. One decision for the record: we keep the Lakeside region for hosting."),
+    (1, "Agreed. One open question remains: who approves the budget increase for storage?"),
+    (0, "Let's take that to the steering committee. Thanks everyone."),
+)
+
+
+FOLLOW_UP_SCRIPT: tuple[tuple[int, str], ...] = (
+    (1, "Quick follow up on the checklist. Most of the items are done already."),
+    (0, "Good to hear. Did we hear back about the storage budget?"),
+    (1, "Not yet. The steering committee meets next Tuesday."),
+    (0, "Fine. Please send me the checklist once it is complete."),
+)
+
+
+def build_meeting(
+    path: Path,
+    voices: tuple[str, str],
+    *,
+    script: tuple[tuple[int, str], ...] = MEETING_SCRIPT,
+    pause_s: float = 0.7,
+) -> list[str]:
+    """Render MEETING_SCRIPT with two TTS voices into one audio file (needs ffmpeg).
+
+    Returns the lines in order. Uses the platform speech-synthesis backend.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+
+    from dossier import platform
+
+    tts = platform.current().tts
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        raise RuntimeError("ffmpeg is required to build the synthetic meeting")
+    with tempfile.TemporaryDirectory(prefix="dossier-meeting-") as tmp:
+        parts: list[Path] = []
+        for index, (speaker, line) in enumerate(script):
+            part = Path(tmp) / f"{index:02d}.wav"
+            tts.synthesize(line, part, voice=voices[speaker])
+            parts.append(part)
+        listing = Path(tmp) / "list.txt"
+        silence = Path(tmp) / "silence.wav"
+        subprocess.run(
+            [
+                ffmpeg,
+                "-nostdin",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=r=16000:cl=mono",
+                "-t",
+                str(pause_s),
+                "-c:a",
+                "pcm_s16le",
+                str(silence),
+            ],
+            check=True,
+        )
+        entries = []
+        for part in parts:
+            entries += [f"file '{part}'", f"file '{silence}'"]
+        listing.write_text("\n".join(entries) + "\n", encoding="utf-8")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            [
+                ffmpeg,
+                "-nostdin",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(listing),
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "64k",
+                str(path),
+            ],
+            check=True,
+        )
+    return [line for _, line in script]
