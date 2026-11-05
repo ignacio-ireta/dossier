@@ -39,6 +39,7 @@ def test_generic_bundle() -> None:
         "ocr",
         "tts",
         "scheduler",
+        "player",
     }
     with pytest.raises(CapabilityUnavailableError):
         bundle.tts.synthesize("hi", Path("x.wav"))

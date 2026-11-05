@@ -1,4 +1,4 @@
-"""macOS backends: Apple Vision OCR, ``say``, launchd, ``osascript``, ``caffeinate``.
+"""macOS backends: Apple Vision OCR, ``say``, ``afplay``, launchd, ``osascript``, ``caffeinate``.
 
 This is the only module allowed to call macOS-specific programs and APIs.
 """
@@ -211,6 +211,21 @@ class SayTts:
             encoded.replace(output)
 
 
+class AfplayPlayer:
+    name = "player"
+
+    def available(self) -> bool:
+        return shutil.which("afplay") is not None
+
+    def detail(self) -> str:
+        return "afplay"
+
+    def play(self, path: Path) -> None:
+        if not self.available():
+            raise CapabilityUnavailableError("afplay not found")
+        _run(["afplay", str(path)], "audio playback", timeout=600)
+
+
 class LaunchdScheduler:
     name = "scheduler"
 
@@ -297,4 +312,5 @@ def build() -> Platform:
         ocr=AppleVisionOcr(),
         tts=SayTts(),
         scheduler=LaunchdScheduler(),
+        player=AfplayPlayer(),
     )

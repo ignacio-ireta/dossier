@@ -14,7 +14,7 @@ SRC = Path(dossier.__file__).parent
 
 # Programs and APIs that exist only on macOS (or only on POSIX).
 FORBIDDEN = re.compile(
-    r"\b(osascript|launchctl|caffeinate|afconvert|ocrmac|st_flags|fcntl|plistlib|"
+    r"\b(osascript|launchctl|caffeinate|afconvert|afplay|ffplay|ocrmac|st_flags|fcntl|plistlib|"
     r"os\.getuid|os\.fork|LaunchAgents)\b|\[\"say\"|'say'"
 )
 

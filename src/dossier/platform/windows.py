@@ -10,6 +10,7 @@ from __future__ import annotations
 from dossier.platform.base import Platform
 from dossier.platform.generic import (
     ConservativeProcessProbe,
+    FfplayPlayer,
     LogNotifier,
     NoKeepAwake,
     NoPlaceholders,
@@ -31,4 +32,5 @@ def build() -> Platform:
         ocr=UnavailableOcr(f"Windows.Media.Ocr / Tesseract backend {_PLANNED}"),
         tts=UnavailableTts(f"SAPI backend {_PLANNED}"),
         scheduler=UnavailableScheduler(f"Task Scheduler backend {_PLANNED}"),
+        player=FfplayPlayer(),
     )

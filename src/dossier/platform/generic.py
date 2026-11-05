@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
+import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -138,6 +140,25 @@ class UnavailableTts:
         raise CapabilityUnavailableError(f"speech synthesis unavailable: {self._reason}")
 
 
+class FfplayPlayer:
+    """Plays audio with ffplay (part of ffmpeg on Windows and Linux builds)."""
+
+    name = "player"
+
+    def available(self) -> bool:
+        return shutil.which("ffplay") is not None
+
+    def detail(self) -> str:
+        return "ffplay" if self.available() else "ffplay not found (it comes with ffmpeg)"
+
+    def play(self, path: Path) -> None:
+        program = shutil.which("ffplay")
+        if program is None:
+            raise CapabilityUnavailableError("audio playback needs ffplay (part of ffmpeg)")
+        command = [program, "-nodisp", "-autoexit", "-loglevel", "error", str(path)]
+        subprocess.run(command, check=False, capture_output=True, timeout=600)
+
+
 class UnavailableScheduler:
     name = "scheduler"
 
@@ -172,4 +193,5 @@ def build() -> Platform:
         ocr=UnavailableOcr(),
         tts=UnavailableTts(),
         scheduler=UnavailableScheduler(),
+        player=FfplayPlayer(),
     )

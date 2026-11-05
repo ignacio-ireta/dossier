@@ -28,6 +28,7 @@ rest of the code free of macOS-only calls (it also imports every module with
 | Speech synthesis (test fixtures only) | SAPI via `pyttsx3` | synthetic meeting tests skip |
 | Scheduler | Task Scheduler (`schtasks` or the COM API), daily trigger plus a folder watcher | run `dsr sync` manually |
 | Notifications | toast notifications | messages go to the log |
+| Audio playback (`dsr meet identify`) | already works with `ffplay` (part of ffmpeg); `winsound` would avoid the dependency | open the clips or `review.html` instead |
 | Keep awake | `SetThreadExecutionState` | long runs may be interrupted by sleep |
 | Cloud placeholders | `FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS` / `RECALL_ON_OPEN` | OneDrive cloud-only files are read (downloaded) |
 

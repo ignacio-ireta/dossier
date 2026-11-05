@@ -18,6 +18,7 @@ class FakeState:
     holds: list[str] = field(default_factory=list)
     jobs: dict[str, ScheduledJob] = field(default_factory=dict)
     ocr_text: dict[Path, list[str]] = field(default_factory=dict)
+    played: list[Path] = field(default_factory=list)
 
 
 class _Base:
@@ -81,6 +82,13 @@ class FakeTts(_Base):
         output.write_text(f"{voice or 'default'}:{text}", encoding="utf-8")
 
 
+class FakePlayer(_Base):
+    name = "player"
+
+    def play(self, path: Path) -> None:
+        self.state.played.append(path)
+
+
 class FakeScheduler(_Base):
     name = "scheduler"
 
@@ -106,4 +114,5 @@ def build(state: FakeState | None = None) -> Platform:
         ocr=FakeOcr(state),
         tts=FakeTts(state),
         scheduler=FakeScheduler(state),
+        player=FakePlayer(state),
     )

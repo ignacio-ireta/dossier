@@ -69,6 +69,12 @@ class Tts(Capability, Protocol):
         ...
 
 
+class AudioPlayer(Capability, Protocol):
+    def play(self, path: Path) -> None:
+        """Play an audio file through the speakers; returns when it has finished."""
+        ...
+
+
 @dataclass(frozen=True)
 class ScheduledJob:
     label: str
@@ -107,6 +113,7 @@ class Platform:
     ocr: Ocr
     tts: Tts
     scheduler: Scheduler
+    player: AudioPlayer
 
     def capabilities(self) -> Iterator[Capability]:
         yield from (
@@ -117,4 +124,5 @@ class Platform:
             self.ocr,
             self.tts,
             self.scheduler,
+            self.player,
         )
