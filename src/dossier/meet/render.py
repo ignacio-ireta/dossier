@@ -1,8 +1,17 @@
-"""Write transcript.md, summary.md, actions.json and subtitle files."""
+"""Write transcript.md, summary.md, actions.json and subtitle files.
+
+The transcript reads as one block per intervention: consecutive turns by the
+same person are joined however long they pause or however diarization cut
+them. "Same person" means the same confirmed name (two labels confirmed as one
+person merge) or, before confirmation, the same label. Long blocks get a
+time-stamped paragraph about every minute so quotes can still be located.
+Subtitles keep the short turns.
+"""
 
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dossier.core.io import atomic_write_json, atomic_write_text
@@ -30,22 +39,62 @@ def _front(record: MeetingRecord, kind: str, extra: dict[str, object] | None = N
     return "\n".join([*lines, "---"])
 
 
-def _speaker_lines(speakers: dict[str, SpeakerInfo]) -> list[str]:
-    return [f"- {info.display()}: {clock(info.seconds)} of speech" for info in speakers.values()]
+PARAGRAPH_SECONDS = 60.0  # a long block gets a new time-stamped paragraph about every minute
+LONG_PAUSE = 15.0  # and after a long silence
 
 
-def merge_turns(turns: list[Turn]) -> list[Turn]:
-    """Merge consecutive turns by the same speaker for reading."""
-    merged: list[Turn] = []
+def speaker_identity(speakers: dict[str, SpeakerInfo], label: str) -> str:
+    """The confirmed name, else the label: what decides whether two turns are one person."""
+    info = speakers.get(label)
+    if info is not None and info.status == "confirmed" and info.name:
+        return f"name:{info.name}"
+    return f"label:{label}"
+
+
+@dataclass
+class Block:
+    identity: str
+    speaker: str  # label of the first turn
+    start: float
+    end: float
+    paragraphs: list[tuple[float, str]] = field(default_factory=list)
+
+
+def blocks(speakers: dict[str, SpeakerInfo], turns: list[Turn]) -> list[Block]:
+    """Join consecutive turns by the same person into one block."""
+    result: list[Block] = []
     for turn in turns:
-        if merged and merged[-1].speaker == turn.speaker and turn.start - merged[-1].end < 3:
-            last = merged[-1]
-            merged[-1] = last.model_copy(
-                update={"end": turn.end, "text": f"{last.text} {turn.text}"}
-            )
+        identity = speaker_identity(speakers, turn.speaker)
+        if result and result[-1].identity == identity:
+            block = result[-1]
+            started, text = block.paragraphs[-1]
+            if turn.start - started >= PARAGRAPH_SECONDS or turn.start - block.end >= LONG_PAUSE:
+                block.paragraphs.append((turn.start, turn.text))
+            else:
+                block.paragraphs[-1] = (started, f"{text} {turn.text}")
+            block.end = max(block.end, turn.end)
         else:
-            merged.append(turn)
-    return merged
+            result.append(
+                Block(identity, turn.speaker, turn.start, turn.end, [(turn.start, turn.text)])
+            )
+    return result
+
+
+def _people_count(record: MeetingRecord) -> int:
+    return len({speaker_identity(record.speakers, label) for label in record.speakers})
+
+
+def _speaker_lines(speakers: dict[str, SpeakerInfo]) -> list[str]:
+    """One line per person; labels confirmed as the same person are added up."""
+    grouped: dict[str, list[SpeakerInfo]] = {}
+    for info in speakers.values():
+        grouped.setdefault(speaker_identity(speakers, info.label), []).append(info)
+    lines = []
+    for infos in grouped.values():
+        seconds = sum(info.seconds for info in infos)
+        labels = f" ({', '.join(i.label for i in infos)})" if len(infos) > 1 else ""
+        lines.append(f"- {infos[0].display()}: {clock(seconds)} of speech{labels}")
+    return lines
 
 
 def transcript_md(record: MeetingRecord, turns: list[Turn]) -> str:
@@ -54,7 +103,7 @@ def transcript_md(record: MeetingRecord, turns: list[Turn]) -> str:
         "",
         f"# {record.title}",
         "",
-        f"{record.date} · {clock(record.duration_s or 0)} · {len(record.speakers)} speaker(s)"
+        f"{record.date} · {clock(record.duration_s or 0)} · {_people_count(record)} speaker(s)"
         f" · {language_label(record)}",
         "",
         "## Speakers",
@@ -65,10 +114,12 @@ def transcript_md(record: MeetingRecord, turns: list[Turn]) -> str:
     if any(info.status == "suggested" for info in record.speakers.values()):
         parts += [f"> {NOTE_NAMES}", ""]
     parts += ["## Transcript", ""]
-    for turn in merge_turns(turns):
-        info = record.speakers.get(turn.speaker)
-        who = info.display() if info else turn.speaker
-        parts += [f"**[{clock(turn.start)}] {who}:** {turn.text}", ""]
+    for block in blocks(record.speakers, turns):
+        info = record.speakers.get(block.speaker)
+        who = info.display() if info else block.speaker
+        (first_at, first_text), *more = block.paragraphs
+        parts += [f"**[{clock(first_at)}] {who}:** {first_text}", ""]
+        parts += [line for at, text in more for line in (f"[{clock(at)}] {text}", "")]
     return "\n".join(parts).rstrip() + "\n"
 
 

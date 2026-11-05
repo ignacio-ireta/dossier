@@ -18,13 +18,20 @@ Recordings dropped into a source folder are transcribed automatically by
 
 | File | Contents |
 |---|---|
-| `transcript.md` | Turns as `**[mm:ss] Speaker:** text`, speaker list, duration |
+| `transcript.md` | One block per intervention (`**[mm:ss] Speaker:** text`), speaker list, duration, language |
 | `summary.md` | Overview, topics, decisions, action items (task, owner, due, time), open questions |
 | `actions.json` | The action items, machine-readable |
 | `brief.md` | Written by `dsr meet brief`: summary items, slides, related documents |
 | `deck.md` | Text of the slides shown, when `--deck` was given |
 | `meeting.json` | Title, date, language, speakers, models used, stage status |
 | `machine/` | Words as heard (`words.json`), diarization, turns after glossary fixes, `.srt`, `.vtt` |
+
+A transcript block holds everything a person says until someone else speaks,
+however long they pause and however the diarization cut their speech. Labels
+confirmed as the same person (a voice split in two) count as one person. Long
+blocks get a time-stamped paragraph (`[12:05] ...`) about every minute and
+after long silences, so quotes stay easy to locate. The finer turns remain in
+`machine/turns.json` and the subtitle files.
 
 Transcripts and summaries are indexed like documents: search them with
 `dsr search "..." --kind meeting`, and agents get the MCP tools `meetings`,

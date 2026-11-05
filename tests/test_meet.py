@@ -369,6 +369,51 @@ def test_actions_json_uses_confirmed_names(tmp_path: Path) -> None:
     ]
 
 
+def test_transcript_joins_consecutive_turns_of_one_person(tmp_path: Path) -> None:
+    from dossier.meet.models import MeetingRecord, Turn
+    from dossier.meet.render import transcript_md
+
+    def info(label: str, name: str | None = None, status: str = "unknown") -> SpeakerInfo:
+        return SpeakerInfo.model_validate(
+            {"label": label, "name": name, "status": status, "seconds": 30.0}
+        )
+
+    record = MeetingRecord(
+        id="m",
+        title="Weekly",
+        date="2026-11-02",
+        source="x.wav",
+        sha256="0" * 64,
+        speakers={
+            "SPEAKER_00": info("SPEAKER_00", "Anne", "confirmed"),
+            "SPEAKER_01": info("SPEAKER_01"),
+            "SPEAKER_02": info("SPEAKER_02", "Anne", "confirmed"),  # a split of Anne
+            "SPEAKER_03": info("SPEAKER_03", "Beth", "suggested"),
+        },
+    )
+    turns = [
+        Turn(start=0, end=4, speaker="SPEAKER_00", text="Hello all."),
+        Turn(start=9, end=12, speaker="SPEAKER_00", text="After a pause."),  # 5 s gap
+        Turn(start=12.5, end=14, speaker="SPEAKER_02", text="Same person, other label."),
+        Turn(start=40, end=44, speaker="SPEAKER_00", text="After a long silence."),
+        Turn(start=70, end=75, speaker="SPEAKER_00", text="A minute later."),
+        Turn(start=76, end=78, speaker="SPEAKER_01", text="Question?"),
+        Turn(start=79, end=80, speaker="SPEAKER_03", text="One."),
+        Turn(start=80.2, end=81, speaker="SPEAKER_03", text="Two."),
+    ]
+    text = transcript_md(record, turns)
+    body = text.split("## Transcript", 1)[1].strip().split("\n\n")
+    assert body == [
+        "**[00:00] Anne:** Hello all. After a pause. Same person, other label.",
+        "[00:40] After a long silence.",
+        "[01:10] A minute later.",
+        "**[01:16] SPEAKER_01:** Question?",
+        "**[01:19] SPEAKER_03 (likely Beth):** One. Two.",
+    ]
+    assert "- Anne: 01:00 of speech (SPEAKER_00, SPEAKER_02)" in text
+    assert "3 speaker(s)" in text
+
+
 def test_speaker_assignment_and_turns() -> None:
     words = [
         Word(start=0.0, end=0.5, text="hi"),
