@@ -1,6 +1,6 @@
 [project]
 name = "dossier"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Local-first context suite for AI agents: keep a project corpus converted, summarized and searchable, process meetings, and render documents from per-account templates."
 readme = "README.md"
 license = "MIT"
@@ -68,7 +68,7 @@ packages = ["src/dossier"]
 [tool.hatch.build.targets.sdist]
 include = [
     "src/dossier", "docs", "scripts",
-    "README.md", "CONTRIBUTING.md", "LICENSE", "NOTICE.md", "Brewfile",
+    "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "NOTICE.md", "Brewfile",
 ]
 
 [tool.ruff]
