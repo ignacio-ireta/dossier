@@ -6,11 +6,26 @@ present and how to add what is missing.
 
 ## macOS (Apple Silicon)
 
+You need 16 GB of memory or more and about 12 GB of free disk (8 GB for the
+local models, 2 GB for Python packages).
+
+From the shared bundle, `dossier-<version>-bundle.zip`:
+
+```bash
+unzip dossier-0.1.0-bundle.zip && cd dossier-0.1.0
+shasum -a 256 -c SHA256SUMS            # optional: check the files arrived intact
+brew bundle --file Brewfile
+uv tool install --python 3.12 "dossier[all] @ ./dossier-0.1.0-py3-none-any.whl"
+brew services start ollama            # or run `ollama serve` when needed
+dsr doctor
+```
+
+From the source (a clone, or `git clone dossier-0.1.0.git.bundle dossier`):
+
 ```bash
 brew bundle --file Brewfile
-uv tool install --python 3.12 "<path-or-url-to-dossier>[all]"
+uv tool install --python 3.12 "<path-to-dossier>[all]"
 dsr doctor
-brew services start ollama            # or run `ollama serve` when needed
 ```
 
 | Program | Needed for | Install |
@@ -48,9 +63,16 @@ create a read token, and store it with `dsr secrets set hf-token`.
 
 ## Upgrading and removing
 
+A newer bundle installs over the old version:
+
 ```bash
-uv tool upgrade dossier
-dsr schedule remove        # in each workspace with a schedule, before uninstalling
+uv tool install --reinstall --python 3.12 "dossier[all] @ ./dossier-0.2.0-py3-none-any.whl"
+```
+
+To remove it:
+
+```bash
+dsr schedule remove        # first, in each workspace with a schedule
 uv tool uninstall dossier
 ```
 
