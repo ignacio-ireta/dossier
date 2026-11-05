@@ -15,7 +15,7 @@ from dossier.core.policy import set_processing
 from dossier.core.workspace import Workspace, open_workspace
 from dossier.llm.fake import FakeProvider
 from dossier.meet import people
-from dossier.meet.backends import Diarization
+from dossier.meet.backends import Diarization, detect_language, speech_windows
 from dossier.meet.eval import loops, score
 from dossier.meet.glossary import Glossary
 from dossier.meet.models import DiarSegment, SpeakerInfo, Word, clock, parse_clock
@@ -23,6 +23,7 @@ from dossier.meet.pipeline import (
     Engines,
     MeetOptions,
     confirm_speakers,
+    default_language,
     list_meetings,
     load_record,
     process_recording,
@@ -44,13 +45,21 @@ class FakeAsr:
     name = "fake-asr"
     model_id = "fake"
 
-    def __init__(self) -> None:
+    def __init__(self, probs: dict[str, float] | None = None) -> None:
         self.calls = 0
         self.prompts: list[str | None] = []
+        self.languages: list[str | None] = []
+        self.probs = probs or {"en": 0.9, "es": 0.1}
+        self.detections = 0
+
+    def language_probs(self, samples: Any) -> dict[str, float]:
+        self.detections += 1
+        return dict(self.probs)
 
     def transcribe(self, audio: Path, *, language: str | None, prompt: str | None) -> list[Word]:
         self.calls += 1
         self.prompts.append(prompt)
+        self.languages.append(language)
         words: list[Word] = []
         for start, end, _speaker, text in SCRIPT:
             tokens = text.split()
@@ -235,6 +244,98 @@ def test_glossary_language_sections(tmp_path: Path) -> None:
     path.write_text('terms = []\n[spanish_terms]\nterms = ["x"]\n', encoding="utf-8")
     with pytest.raises(DossierError, match="unknown table"):
         Glossary.load(path)
+
+
+_ORIGINAL_CONFIG: dict[Path, str] = {}
+
+
+def _languages(workspace: Workspace, languages: str, meet: str = "") -> Workspace:
+    """Rewrite the workspace's languages (and add [meet] lines) from its original config."""
+    original = _ORIGINAL_CONFIG.setdefault(
+        workspace.paths.config, workspace.paths.config.read_text()
+    )
+    text = original.replace('languages = ["en"]', f"languages = {languages}")
+    if meet:
+        text = text.replace("[meet]\n", f"[meet]\n{meet}\n")
+    workspace.paths.config.write_text(text)
+    return open_workspace(workspace.root)
+
+
+def test_default_language_from_workspace_languages(approved: Workspace) -> None:
+    assert default_language(approved.config) == "en"
+    assert default_language(_languages(approved, '["es", "en"]').config) == "auto"
+    assert default_language(_languages(approved, '["es-MX"]').config) == "es"
+    assert default_language(_languages(approved, '["es", "en"]', 'language = "en"').config) == "en"
+    assert default_language(_languages(approved, "[]").config) == "auto"
+    with pytest.raises(DossierError, match="unknown language"):
+        _languages(approved, '["en"]', 'language = "klingon"')
+
+
+@needs_ffmpeg
+def test_language_detected_among_workspace_languages(
+    approved: Workspace, tmp_path: Path, fake_model: FakeProvider, caplog: pytest.LogCaptureFixture
+) -> None:
+    workspace = _languages(approved, '["es", "en"]', 'glossary = "glossary.toml"')
+    (workspace.root / "glossary.toml").write_text('terms = ["Lakeside"]\n')
+    # Whisper's favourite is Portuguese, but only Spanish and English are candidates.
+    asr = FakeAsr({"pt": 0.5, "es": 0.4, "en": 0.1})
+    record = process_recording(
+        workspace, _wav(tmp_path / "reunion.wav"), engines=Engines(asr, FakeDiarizer())
+    )
+    assert (record.language, record.language_source) == ("es", "detected")
+    assert record.language_confidence == 0.8
+    assert asr.languages == ["es"] and asr.prompts == ["Glosario: Lakeside."]
+    assert "sounds like Portuguese" in caplog.text
+    transcript = (workspace.paths.meetings / record.id / "transcript.md").read_text()
+    assert "Spanish (detected, 0.80)" in transcript
+    system = fake_model.calls[0]["messages"][0].content
+    assert "Write in Spanish, the language of the meeting." in system
+
+
+@needs_ffmpeg
+def test_language_option_overrides_and_reruns(approved: Workspace, tmp_path: Path) -> None:
+    asr = FakeAsr({"en": 0.2, "es": 0.8})
+    engines = Engines(asr, FakeDiarizer())
+    recording = _wav(tmp_path / "call.wav")
+    record = process_recording(approved, recording, engines=engines)
+    assert (record.language, record.language_source) == ("en", "set")  # one workspace language
+    assert asr.detections == 0
+    record = process_recording(approved, recording, MeetOptions(language="es"), engines=engines)
+    assert record.language == "es" and asr.languages == ["en", "es"]
+    process_recording(approved, recording, MeetOptions(language="Spanish"), engines=engines)
+    assert asr.calls == 2  # same language: nothing to redo
+    record = process_recording(approved, recording, MeetOptions(language="auto"), engines=engines)
+    assert (record.language, record.language_source) == ("es", "detected")
+    assert asr.calls == 3 and asr.detections == 1  # any language: one workspace language
+    process_recording(approved, recording, MeetOptions(language="auto"), engines=engines)
+    assert asr.calls == 3  # already detected
+    with pytest.raises(DossierError, match="unknown language"):
+        process_recording(approved, recording, MeetOptions(language="xx"), engines=engines)
+
+
+def test_speech_windows_pick_speech_across_the_recording(tmp_path: Path) -> None:
+    np = pytest.importorskip("numpy")
+    rate = 16_000
+    audio = np.zeros(120 * rate, dtype=np.float32)
+    audio[50 * rate : 75 * rate] = 0.3  # speech only in the middle
+    windows = speech_windows(audio)
+    assert len(windows) == 1 and float(np.abs(windows[0]).mean()) > 0.2
+    audio[5 * rate : 30 * rate] = 0.2  # now speech in each third
+    audio[95 * rate : 118 * rate] = 0.2
+    windows = speech_windows(audio)
+    assert len(windows) == 3 and all(float(np.abs(w).mean()) > 0.1 for w in windows)
+    audio[50 * rate : 75 * rate] = 0.001  # the middle third is now only noise
+    assert len(speech_windows(audio)) == 2
+    assert len(speech_windows(audio[: 20 * rate])) == 1
+
+
+def test_detect_language_restricts_to_candidates(tmp_path: Path) -> None:
+    pytest.importorskip("numpy")
+    wav = _wav(tmp_path / "a.wav", seconds=3.0)
+    asr = FakeAsr({"pt": 0.6, "es": 0.3, "en": 0.1})
+    guess = detect_language(asr, wav, ["es", "en"])
+    assert (guess.language, guess.probability, guess.heard) == ("es", 0.75, "pt")
+    assert detect_language(asr, wav).language == "pt"
 
 
 def test_speaker_assignment_and_turns() -> None:

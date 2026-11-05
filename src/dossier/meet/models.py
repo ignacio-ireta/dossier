@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from dossier.core.languages import AUTO, language_name
+
 
 class Word(BaseModel):
     start: float = Field(ge=0)
@@ -59,7 +61,9 @@ class MeetingRecord(BaseModel):
     source: str  # where the recording was (workspace-relative when inside it)
     sha256: str
     duration_s: float | None = None
-    language: str = "en"
+    language: str = "en"  # a code, or "auto" until the language is detected
+    language_source: Literal["set", "detected"] = "set"
+    language_confidence: float | None = None  # when detected
     asr: str = ""
     diarization: str = ""
     roster: list[str] = Field(default_factory=list)
@@ -67,6 +71,16 @@ class MeetingRecord(BaseModel):
     stages: dict[str, StageRecord] = Field(default_factory=dict)
     deck: str | None = None
     summary_status: Literal["none", "ok", "degraded"] = "none"
+
+
+def language_label(record: MeetingRecord) -> str:
+    """``Spanish``, ``Spanish (detected, 0.97)`` or ``language not detected yet``."""
+    if record.language == AUTO:
+        return "language not detected yet"
+    name = language_name(record.language)
+    if record.language_source == "detected" and record.language_confidence is not None:
+        return f"{name} (detected, {record.language_confidence:.2f})"
+    return name
 
 
 def clock(seconds: float) -> str:

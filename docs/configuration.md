@@ -8,7 +8,7 @@
 |---|---|
 | `name` | Display name. |
 | `brief` | One short, factual paragraph about the workspace. Models receive it as context. Keep it free of personal data. |
-| `languages` | Main languages of the material (e.g. `["en", "es"]`), used for OCR and transcription hints. |
+| `languages` | Languages of the material (e.g. `["es", "en"]`). OCR uses them as hints; with more than one, each meeting's language is detected among them. `dsr init --language es --language en` sets this. |
 
 ## `[policy]`
 
@@ -93,5 +93,6 @@ are free-form.
 |---|---|
 | `docs.template` | Default template pack for rendered documents. |
 | `agent.allow_render` | Let MCP clients render documents. |
-| `meet.glossary` | Path to a glossary used for transcription. |
+| `meet.language` | Spoken language of meetings: a code (`"es"`, `"en"`...) or `"auto"` to detect it per recording. Default: `"auto"` when `languages` lists several, otherwise that language. `dsr meet add --language` overrides it per meeting. |
+| `meet.glossary` | Path to a glossary used for transcription (terms, mishearings, per-language sections; see [meetings](meetings.md#glossary)). |
 | `meet.speaker_voiceprints` | Opt-in speaker recognition; voiceprints are biometric data and stay local. |

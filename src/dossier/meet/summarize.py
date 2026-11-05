@@ -10,6 +10,9 @@ and near-duplicate removal).
 Every item's timestamp is checked against the transcript: it must fall inside
 the window and on an actual turn. Items that fail are dropped and counted.
 Owners and due dates are kept only as stated; anything else becomes UNKNOWN.
+
+Notes are written in the meeting's language: quoting the meeting in its own
+language keeps stated owners and due dates verifiable against the transcript.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ from dataclasses import dataclass, field
 from pydantic import BaseModel, Field
 
 from dossier.core.config import WorkspaceConfig
+from dossier.core.languages import AUTO, LANGUAGES, language_name
 from dossier.llm.budget import pack, truncate_to_tokens
 from dossier.llm.router import RoleClient
 from dossier.llm.structured import Outcome, generate_structured
@@ -133,6 +137,7 @@ def summarize(
     turns: list[Turn],
     speakers: dict[str, SpeakerInfo],
     context: str = "",
+    language: str | None = None,
 ) -> MeetingSummary:
     result = MeetingSummary()
     if not turns:
@@ -147,12 +152,18 @@ def summarize(
     windows = pack(lines, budget, separator="\n")
     result.windows = len(windows)
     brief = config.workspace.brief.strip()
+    write_in = (
+        f" Write in {language_name(language)}, the language of the meeting."
+        if language and language != AUTO and language in LANGUAGES
+        else " Write in the language of the meeting."
+    )
     system = (
         f'You take notes on meetings for the workspace "{config.workspace.name}".'
         + (f" Workspace context: {brief}" if brief else "")
         + " Use only what is said in the transcript. Every item needs the [mm:ss] time where it "
         "is said. owner and due: only if a person or date is explicitly stated for that action, "
         'otherwise "UNKNOWN". Do not guess. Speaker labels like SPEAKER_01 are not names.'
+        + write_in
     )
     window_summaries: list[str] = []
     for number, window in enumerate(windows, start=1):

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from dossier.core.io import atomic_write_json, atomic_write_text
-from dossier.meet.models import MeetingRecord, SpeakerInfo, Turn, clock
+from dossier.meet.models import MeetingRecord, SpeakerInfo, Turn, clock, language_label
 from dossier.meet.summarize import MeetingSummary
 
 NOTE_NAMES = (
@@ -54,7 +54,8 @@ def transcript_md(record: MeetingRecord, turns: list[Turn]) -> str:
         "",
         f"# {record.title}",
         "",
-        f"{record.date} · {clock(record.duration_s or 0)} · {len(record.speakers)} speaker(s)",
+        f"{record.date} · {clock(record.duration_s or 0)} · {len(record.speakers)} speaker(s)"
+        f" · {language_label(record)}",
         "",
         "## Speakers",
         "",

@@ -8,9 +8,10 @@ and a changed stage re-runs it and everything after it):
 A meeting is identified by the content hash of its recording: the same file
 added twice (or moved) is the same meeting.
 
-Glossary replacements are applied in ``assign``, so ``machine/words.json``
-keeps what the recognizer heard and a changed glossary only needs
-``--force assign``.
+Language: each meeting has one spoken language, set explicitly or detected
+(``auto``) at the start of the ``asr`` stage. Glossary replacements are applied
+in ``assign``, so ``machine/words.json`` keeps what the recognizer heard and a
+changed glossary only needs ``--force assign``.
 """
 
 from __future__ import annotations
@@ -25,8 +26,10 @@ from pathlib import Path
 from typing import Any
 
 from dossier import platform
+from dossier.core.config import WorkspaceConfig
 from dossier.core.errors import DossierError, ProviderUnavailableError
 from dossier.core.io import atomic_write_json, atomic_write_text, read_json, sha256_file
+from dossier.core.languages import AUTO, LANGUAGES, language_code, language_name
 from dossier.core.workspace import Workspace
 from dossier.llm.router import ModelRouter, RoleClient
 from dossier.meet import people as people_store
@@ -38,6 +41,7 @@ from dossier.meet.backends import (
     PyannoteDiarizer,
     SingleSpeaker,
     asr_backend,
+    detect_language,
 )
 from dossier.meet.glossary import Glossary
 from dossier.meet.models import (
@@ -46,6 +50,7 @@ from dossier.meet.models import (
     StageRecord,
     Turn,
     Word,
+    language_label,
 )
 from dossier.meet.render import write_outputs
 from dossier.meet.speakers import assign, speaker_table, suggest_names, to_turns
@@ -71,6 +76,7 @@ class MeetOptions:
     title: str | None = None
     roster: list[str] = field(default_factory=list)
     deck: Path | None = None
+    language: str | None = None  # a code or "auto"; default: default_language()
     diarize: bool = True
     force: set[str] = field(default_factory=set)
     scheduled: bool = False
@@ -88,6 +94,40 @@ def default_engines(workspace: Workspace, *, diarize: bool = True) -> Engines:
         PyannoteDiarizer(settings.diarization_model) if diarize else SingleSpeaker()
     )
     return Engines(asr=asr_backend(settings), diarizer=diarizer)
+
+
+def workspace_languages(config: WorkspaceConfig) -> list[str]:
+    """The workspace's languages as Whisper codes (unknown entries are skipped)."""
+    codes: list[str] = []
+    for value in config.workspace.languages:
+        code = language_code(value)
+        if code in LANGUAGES:
+            codes.append(code)
+        else:
+            log.warning("ignoring unknown workspace language %r for meetings", value)
+    return list(dict.fromkeys(codes))
+
+
+def default_language(config: WorkspaceConfig) -> str:
+    """``[meet] language``; else auto for a multilingual workspace; else its language."""
+    if config.meet.language:
+        return config.meet.language
+    languages = workspace_languages(config)
+    return languages[0] if len(languages) == 1 else AUTO
+
+
+def _set_language(record: MeetingRecord, requested: str) -> bool:
+    """Apply a requested language to an existing meeting; True if ASR must re-run."""
+    if requested == AUTO:
+        if record.language_source == "detected":
+            return False  # already detected; detecting again gives the same answer
+        record.language, record.language_confidence = AUTO, None
+        return True
+    if requested == record.language:
+        record.language_source, record.language_confidence = "set", None
+        return False
+    record.language, record.language_source, record.language_confidence = requested, "set", None
+    return True
 
 
 def _slug(text: str) -> str:
@@ -199,10 +239,20 @@ def process_recording(
     if not source.is_file():
         raise DossierError(f"{source} not found")
     settings = workspace.config.meet
+    force = set(options.force)
+    requested = None
+    if options.language is not None:
+        requested = language_code(options.language)
+        if requested is None:
+            raise DossierError(
+                f'unknown language {options.language!r}; use a code such as "es", or "auto"'
+            )
     sha = sha256_file(source)
     folder = find_meeting(workspace, sha)
     if folder is not None:
         record = load_record(folder)
+        if requested is not None and _set_language(record, requested):
+            force.add("asr")
     else:
         date = recorded_date(source)
         title = options.title or _title(source.stem)
@@ -212,7 +262,7 @@ def process_recording(
             date=date,
             source=_relative(workspace, source),
             sha256=sha,
-            language=settings.language or workspace.config.workspace.languages[0],
+            language=requested or default_language(workspace.config),
         )
         folder = workspace.paths.meetings / record.id
     if options.title:
@@ -237,7 +287,7 @@ def process_recording(
             previous is not None
             and previous.status in {"done", "skipped"}
             and previous.version == STAGES[stage]
-            and stage not in options.force
+            and stage not in force
         )
         if not fresh:
             rerun = True
@@ -262,6 +312,8 @@ def process_recording(
             record.duration_s = round(normalize(source, wav), 2)
             finish("audio")
         if asr_needed:
+            if record.language == AUTO:
+                _detect(workspace, engines.asr, wav, record)
             words = engines.asr.transcribe(
                 wav,
                 language=record.language,
@@ -269,7 +321,7 @@ def process_recording(
             )
             atomic_write_json(machine / "words.json", [w.model_dump() for w in words])
             record.asr = f"{engines.asr.name}:{engines.asr.model_id}"
-            finish("asr", detail=f"{len(words)} words")
+            finish("asr", detail=f"{len(words)} words, {language_label(record)}")
         if diarize_needed:
             result = engines.diarizer.diarize(wav)
             atomic_write_json(
@@ -340,6 +392,7 @@ def process_recording(
                 turns=turns,
                 speakers=record.speakers,
                 context=context,
+                language=record.language,
             )
             atomic_write_json(machine / "summary.json", _summary_to_json(summary))
             record.summary_status = "ok" if summary.status == "ok" else "degraded"
@@ -351,6 +404,31 @@ def process_recording(
     if wav.exists() and not settings.keep_audio:
         wav.unlink()
     return record
+
+
+def _detect(workspace: Workspace, asr: AsrBackend, wav: Path, record: MeetingRecord) -> None:
+    languages = workspace_languages(workspace.config)
+    candidates = languages if len(languages) > 1 else None
+    guess = detect_language(asr, wav, candidates)
+    record.language = guess.language
+    record.language_source = "detected"
+    record.language_confidence = guess.probability
+    if candidates and guess.heard not in candidates and guess.heard_probability >= 0.5:
+        log.warning(
+            "meeting %s sounds like %s, which is not among the workspace languages; "
+            "transcribing as %s (use --language to change it)",
+            record.id,
+            language_name(guess.heard),
+            language_name(guess.language),
+        )
+    elif guess.probability < 0.7:
+        log.warning(
+            "meeting %s: language detection is unsure (%s, %.2f); check it with "
+            "`dsr meet list` and use --language to change it",
+            record.id,
+            language_name(guess.language),
+            guess.probability,
+        )
 
 
 def rerender(workspace: Workspace, folder: Path) -> MeetingRecord:
@@ -408,6 +486,7 @@ def resummarize(workspace: Workspace, folder: Path) -> MeetingRecord:
         turns=turns,
         speakers=record.speakers,
         context=context,
+        language=record.language,
     )
     atomic_write_json(machine / "summary.json", _summary_to_json(summary))
     record.summary_status = "ok" if summary.status == "ok" else "degraded"

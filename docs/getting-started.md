@@ -19,14 +19,15 @@ meetings: `"dossier[ocr,embed,mcp]"`. Start the model server with
 
 ```bash
 mkdir -p ~/Work/acme && cd ~/Work/acme
-dsr init --name "Acme"
+dsr init --name "Acme" --language es --language en   # the languages of the material
 ```
 
 Edit `dossier.toml`:
 
 - **`[workspace] brief`**: two or three factual sentences about the engagement
   (what it is, its main topics). Every summary uses it as context. No personal data.
-- **`languages`**: e.g. `["en", "es"]`, used for OCR and transcription.
+- **`languages`**: e.g. `["es", "en"]`, used for OCR, and with more than one,
+  each meeting's language is detected among them.
 - **`[[sources]]`**: one block per folder to follow. Synced folders work:
 
   ```toml

@@ -81,6 +81,13 @@ def init(
     name: Annotated[str | None, typer.Option(help="Workspace name (default: folder name).")] = None,
     chat_model: Annotated[str, typer.Option(help="Model for summaries.")] = DEFAULT_CHAT_MODEL,
     embed_model: Annotated[str, typer.Option(help="Model for embeddings.")] = DEFAULT_EMBED_MODEL,
+    language: Annotated[
+        list[str] | None,
+        typer.Option(
+            help="Language of the material (repeat for several, e.g. --language es "
+            "--language en); with several, meeting languages are detected. Default: en."
+        ),
+    ] = None,
     force: Annotated[bool, typer.Option(help="Overwrite an existing dossier.toml.")] = False,
 ) -> None:
     """Create a workspace: folders plus a commented dossier.toml (policy: pending)."""
@@ -91,6 +98,7 @@ def init(
         name=name or root.name,
         chat_model=chat_model,
         embed_model=embed_model,
+        languages=language,
         force=force,
     )
     if state.json:

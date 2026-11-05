@@ -2,9 +2,11 @@
 
     uv run python tests/e2e.py [--workdir DIR] [--dsr PATH] [--skip-meetings] [--qmd]
 
-Builds an invented project (documents plus a two-voice meeting recording),
-then drives the real ``dsr`` command like a user would: init, approve, sync
-(convert, meetings, index), search for every planted fact, check the meeting,
+Builds an invented bilingual project (documents plus two two-voice meeting
+recordings, one in English and one in Spanish), then drives the real ``dsr``
+command like a user would: init, approve, sync (convert, meetings, index),
+search for every planted fact, check the meetings (detected languages, a
+Spanish summary for the Spanish one),
 render DOCX/PPTX/PDF with a Mermaid diagram, and talk to the MCP server over
 stdio. Needs Ollama with the default models, ffmpeg, pandoc, typst and mmdc;
 meetings also need the meet extra and the pyannote model.
@@ -23,7 +25,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-from dossier.eval.synthetic import MEETING_SCRIPT, build_corpus, build_meeting
+from dossier.eval.synthetic import (
+    MEETING_SCRIPT,
+    MEETING_SCRIPT_ES,
+    build_corpus,
+    build_meeting,
+)
 
 REPORT = """---
 title: Falcon Platform Assessment
@@ -107,13 +114,29 @@ def main() -> int:
     checks = Checks()
     started = time.monotonic()
 
-    code, data = dsr(command, workspace.parent, "init", str(workspace), "--name", "Falcon")
+    code, data = dsr(
+        command,
+        workspace.parent,
+        "init",
+        str(workspace),
+        "--name",
+        "Falcon",
+        "--language",
+        "en",
+        "--language",
+        "es",
+    )
     checks.add("init", code == 0, str(workspace))
     facts = build_corpus(workspace / "sources")
     if not args.skip_meetings:
         build_meeting(
             workspace / "sources" / "calls" / "2026-11-02 Rollout review.m4a",
             ("Samantha", "Daniel"),
+        )
+        build_meeting(
+            workspace / "sources" / "calls" / "2026-11-03 Revision del despliegue.m4a",
+            ("Mónica", "Reed (Spanish (Spain))"),
+            script=MEETING_SCRIPT_ES,
         )
     code, _ = dsr(command, workspace, "sync")
     checks.add("sync blocked before approval", code == 78, f"exit {code}")
@@ -145,17 +168,35 @@ def main() -> int:
     if not args.skip_meetings:
         meetings = stages.get("meetings", {}).get("counts", {})
         checks.add(
-            "meeting transcribed during sync",
-            meetings.get("transcribed") == 1,
+            "meetings transcribed during sync",
+            meetings.get("transcribed") == 2,
             json.dumps(meetings),
         )
         code, data = dsr(command, workspace, "meet", "list")
-        meeting = data[0] if isinstance(data, list) and data else {}
+        listed = data if isinstance(data, list) else []
+        by_language = {m.get("language"): m for m in listed}
+        meeting = by_language.get("en", {})
+        spanish = by_language.get("es", {})
         checks.add(
-            "two speakers",
-            len(meeting.get("speakers", [])) == 2,
-            str([s["label"] for s in meeting.get("speakers", [])]),
+            "languages detected",
+            set(by_language) == {"en", "es"}
+            and all(m.get("language_source") == "detected" for m in listed),
+            ", ".join(f"{m.get('language')} {m.get('language_confidence')}" for m in listed),
         )
+        checks.add(
+            "two speakers each",
+            all(len(m.get("speakers", [])) == 2 for m in listed) and len(listed) == 2,
+            str([len(m.get("speakers", [])) for m in listed]),
+        )
+        summary_path = workspace / "meetings" / spanish.get("id", "?") / "machine" / "summary.json"
+        overview = (
+            json.loads(summary_path.read_text()).get("overview", "")
+            if summary_path.is_file()
+            else ""
+        )
+        spanish_words = {"el", "la", "de", "que", "para", "se", "los", "del"}
+        found = [w for w in overview.lower().split() if w in spanish_words]
+        checks.add("Spanish meeting summarized in Spanish", len(found) >= 4, overview[:90])
         actions_path = workspace / "meetings" / meeting.get("id", "?") / "actions.json"
         actions = json.loads(actions_path.read_text()) if actions_path.is_file() else []
         duration = len(MEETING_SCRIPT) * 6

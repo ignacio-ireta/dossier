@@ -260,6 +260,26 @@ MEETING_SCRIPT: tuple[tuple[int, str], ...] = (
 )
 
 
+# The same meeting in Spanish, for language detection and Spanish summaries.
+MEETING_SCRIPT_ES: tuple[tuple[int, str], ...] = (
+    (0, "Buenos días a todos. Vamos a revisar el plan de despliegue de Falcon de este trimestre."),
+    (
+        1,
+        "Gracias. Soy Sam, del equipo de plataforma. El piloto terminó la semana pasada y los "
+        "dos equipos piloto están contentos con los paneles.",
+    ),
+    (0, "Muy bien. Acordamos que la segunda fase del despliegue empieza el uno de marzo."),
+    (1, "Yo prepararé la lista de verificación de la migración para el viernes."),
+    (0, "Perfecto. Una decisión para el acta: mantenemos la región Lakeside para el alojamiento."),
+    (
+        1,
+        "De acuerdo. Queda una pregunta abierta: ¿quién aprueba el aumento de presupuesto para "
+        "el almacenamiento?",
+    ),
+    (0, "Lo llevamos al comité de dirección. Gracias a todos."),
+)
+
+
 FOLLOW_UP_SCRIPT: tuple[tuple[int, str], ...] = (
     (1, "Quick follow up on the checklist. Most of the items are done already."),
     (0, "Good to hear. Did we hear back about the storage budget?"),

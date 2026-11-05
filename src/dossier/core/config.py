@@ -15,6 +15,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from dossier.core.errors import ConfigError
+from dossier.core.languages import language_code
 
 ROLE_NAMES = ("index", "meet", "vision", "embed", "rerank")
 
@@ -181,7 +182,11 @@ class MeetSection(_Strict):
         default=None, description="Path to glossary.toml (terms and replacements)."
     )
     language: str | None = Field(
-        default=None, description="Spoken language code; default: first workspace language."
+        default=None,
+        description=(
+            'Spoken language: a code such as "es" or "en", or "auto" to detect it per '
+            "recording. Default: auto when [workspace] languages lists several, else that one."
+        ),
     )
     asr_backend: AsrBackendName = AsrBackendName.AUTO
     asr_model: str | None = None
@@ -194,6 +199,16 @@ class MeetSection(_Strict):
         default=False, description="Opt-in speaker recognition; voiceprints are biometric data."
     )
     voiceprint_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
+
+    @field_validator("language")
+    @classmethod
+    def _known_language(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        code = language_code(value)
+        if code is None:
+            raise ValueError(f'unknown language {value!r}; use a code such as "es", or "auto"')
+        return code
 
 
 class WorkspaceConfig(_Strict):

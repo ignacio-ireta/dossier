@@ -31,19 +31,38 @@ def register(app: typer.Typer) -> None:
             list[str] | None, typer.Option(help="Attendee name (limits speaker suggestions).")
         ] = None,
         deck: Annotated[Path | None, typer.Option(help="Slides shown (.pptx or .pdf).")] = None,
+        language: Annotated[
+            str | None,
+            typer.Option(
+                help='Spoken language: a code such as "es" or "en", or "auto" to detect it. '
+                "Default: the workspace's [meet] language. Changing it re-transcribes."
+            ),
+        ] = None,
         diarize: Annotated[bool, typer.Option(help="Split by speaker.")] = True,
         force: Annotated[
             list[str] | None, typer.Option(help="Re-run a stage (and those after it).")
         ] = None,
     ) -> None:
         """Transcribe, split by speaker, and summarize one recording."""
+        from dossier.core.languages import language_code
+        from dossier.meet.models import language_label
         from dossier.meet.pipeline import MeetOptions, meeting_json, process_recording
 
+        if language is not None and language_code(language) is None:
+            raise typer.BadParameter(
+                f'unknown language {language!r}; use a code such as "es" or "en", or "auto"',
+                param_hint="--language",
+            )
         state = get_state(ctx)
         workspace = state.workspace()
         require_processing(workspace.config, "meeting transcription")
         options = MeetOptions(
-            title=title, roster=attendee or [], deck=deck, diarize=diarize, force=set(force or [])
+            title=title,
+            roster=attendee or [],
+            deck=deck,
+            language=language,
+            diarize=diarize,
+            force=set(force or []),
         )
 
         def progress(stage: str, meeting_id: str) -> None:
@@ -56,10 +75,12 @@ def register(app: typer.Typer) -> None:
             emit(state, meeting_json(record))
         else:
             console.print(f"[bold]{record.id}[/bold]: meetings/{record.id}/summary.md")
+            console.print(f"  language: {language_label(record)}", highlight=False)
 
     @meet_app.command("list")
     def meet_list(ctx: typer.Context) -> None:
         """Meetings in this workspace, newest first."""
+        from dossier.meet.models import language_label
         from dossier.meet.pipeline import list_meetings, speakers_summary
 
         state = get_state(ctx)
@@ -75,6 +96,9 @@ def register(app: typer.Typer) -> None:
                         "title": r.title,
                         "date": r.date,
                         "duration": clock(r.duration_s or 0),
+                        "language": r.language,
+                        "language_source": r.language_source,
+                        "language_confidence": r.language_confidence,
                         "speakers": speakers_summary(r),
                         "summary_status": r.summary_status,
                     }
@@ -82,13 +106,14 @@ def register(app: typer.Typer) -> None:
                 ],
             )
             return
-        table = Table("id", "title", "date", "duration", "speakers", "summary")
+        table = Table("id", "title", "date", "duration", "language", "speakers", "summary")
         for r in records:
             table.add_row(
                 r.id,
                 r.title,
                 r.date,
                 clock(r.duration_s or 0),
+                language_label(r),
                 str(len(r.speakers)),
                 r.summary_status,
             )

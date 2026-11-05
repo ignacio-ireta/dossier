@@ -18,7 +18,7 @@ def register(server: Any, get_workspace: WorkspaceGetter) -> None:
 
     @server.tool(annotations=read_only)
     def meetings(limit: int = 20, contains: str | None = None) -> dict[str, Any]:
-        """Meetings, newest first: id, title, date, duration, speakers, summary status."""
+        """Meetings, newest first: id, title, date, language, duration, speakers, summary status."""
         workspace = get_workspace()
         require_not_prohibited(workspace.config, "meetings")
         records = list_meetings(workspace)
@@ -30,6 +30,7 @@ def register(server: Any, get_workspace: WorkspaceGetter) -> None:
                     "id": r.id,
                     "title": r.title,
                     "date": r.date,
+                    "language": r.language,
                     "duration": clock(r.duration_s or 0),
                     "speakers": speakers_summary(r),
                     "summary_status": r.summary_status,

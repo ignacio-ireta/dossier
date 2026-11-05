@@ -27,6 +27,31 @@ def test_init_and_status_json(tmp_path: Path) -> None:
     assert data["latest_run"] is None
 
 
+def test_init_languages(tmp_path: Path) -> None:
+    from dossier.core.workspace import open_workspace
+    from dossier.meet.pipeline import default_language
+
+    target = tmp_path / "bilingual"
+    args = ["init", str(target), "--language", "es-MX", "--language", "English"]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    config = open_workspace(target).config
+    assert config.workspace.languages == ["es", "en"]
+    assert default_language(config) == "auto"
+
+    result = runner.invoke(app, ["init", str(tmp_path / "bad"), "--language", "elvish"])
+    assert result.exit_code != 0 and "unknown language" in str(result.exception)
+    assert not (tmp_path / "bad").exists()  # nothing written
+
+
+def test_meet_add_rejects_unknown_language(workspace: Workspace, tmp_path: Path) -> None:
+    recording = tmp_path / "call.wav"
+    recording.write_bytes(b"")
+    args = ["--workspace", str(workspace.root), "meet", "add", str(recording)]
+    result = runner.invoke(app, [*args, "--language", "xx"])
+    assert result.exit_code == 2 and "unknown language" in result.output
+
+
 def test_policy_approve_and_show(workspace: Workspace) -> None:
     ws = ["--workspace", str(workspace.root)]
     result = runner.invoke(app, [*ws, "policy", "approve", "--yes", "--note", "synthetic data"])

@@ -8,8 +8,9 @@ Point it at an account's folders and it:
   spreadsheets), re-scanned on a schedule, only changes processed;
 - **summarizes and indexes it**: a card per document, a summary per folder, a map
   of the whole tree (`INDEX.md`, `TREE.md`), and hybrid keyword + semantic search;
-- **processes meetings**: transcription, speaker separation, speaker-name
-  suggestions, summaries, decisions and action items with checked timestamps;
+- **processes meetings**: transcription in the language spoken (detected per
+  recording), speaker separation, speaker-name suggestions, a per-account
+  glossary, summaries, decisions and action items with checked timestamps;
 - **renders deliverables**: DOCX, PPTX and PDF from Markdown, with Mermaid and
   draw.io diagrams, using each account's own template packs;
 - **serves agents**: an MCP server, a CLI where every command has `--json`, and
@@ -49,7 +50,7 @@ dsr mcp install                        # connect Claude Code (prints the command
 | [Configuration](docs/configuration.md) | Every `dossier.toml` setting |
 | [Corpus](docs/corpus.md) | What each file type becomes; sync, safety, scheduling |
 | [Index and search](docs/index.md) | Cards, folder summaries, search, qmd, benchmarks |
-| [Meetings](docs/meetings.md) | Transcripts, speakers and voiceprints, summaries, glossary |
+| [Meetings](docs/meetings.md) | Transcripts, languages, speakers and voiceprints, summaries, glossary |
 | [Documents](docs/documents.md) | Rendering, diagrams, per-account template packs |
 | [Agents](docs/agents.md) | MCP server, CLI for agents, navigation files, skill |
 | [Models](docs/models.md) | Roles, small-model design, other servers, cloud |

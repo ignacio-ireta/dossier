@@ -2,8 +2,10 @@
 
 ASR: MLX Whisper on Apple Silicon (fast, Metal), faster-whisper (CTranslate2)
 everywhere else, including the future Windows port. Both return words with
-timestamps. Diarization: pyannote; its pipeline also yields one embedding per
-speaker, which speaker suggestions reuse.
+timestamps, and both score which language is spoken, so a recording's language
+can be detected before it is transcribed (see :func:`detect_language`).
+Diarization: pyannote; its pipeline also yields one embedding per speaker, which
+speaker suggestions reuse.
 
 Backends are small classes behind protocols so tests (and other engines) can
 replace them.
@@ -46,6 +48,18 @@ class AsrBackend(Protocol):
         self, audio: Path, *, language: str | None, prompt: str | None
     ) -> list[Word]: ...
 
+    def language_probs(self, samples: Any) -> dict[str, float]:
+        """Probability of each language code for up to 30 s of 16 kHz mono samples."""
+        ...
+
+
+@dataclass(frozen=True)
+class LanguageGuess:
+    language: str  # the most likely of the candidate languages
+    probability: float  # its share of the candidates' probability
+    heard: str  # the most likely language overall
+    heard_probability: float
+
 
 @dataclass
 class Diarization:
@@ -75,6 +89,22 @@ class MlxWhisperBackend:
 
     def __init__(self, model: str | None = None) -> None:
         self.model_id = model or DEFAULT_MLX_MODEL
+
+    def language_probs(self, samples: Any) -> dict[str, float]:
+        try:
+            import mlx.core as mx
+            from mlx_whisper.audio import N_FRAMES, N_SAMPLES, log_mel_spectrogram, pad_or_trim
+            from mlx_whisper.transcribe import ModelHolder
+        except ImportError as exc:
+            raise MeetDependencyError("MLX Whisper needs the meet extra on Apple Silicon") from exc
+        model = ModelHolder.get_model(self.model_id, mx.float16)  # cached for transcribe()
+        if not model.is_multilingual:
+            return {"en": 1.0}
+        mel = log_mel_spectrogram(samples, n_mels=model.dims.n_mels, padding=N_SAMPLES)
+        _tokens, probs = model.detect_language(
+            pad_or_trim(mel, N_FRAMES, axis=-2).astype(mx.float16)
+        )
+        return {str(code): float(p) for code, p in probs.items()}
 
     def transcribe(self, audio: Path, *, language: str | None, prompt: str | None) -> list[Word]:
         try:
@@ -115,13 +145,28 @@ class FasterWhisperBackend:
 
     def __init__(self, model: str | None = None) -> None:
         self.model_id = model or DEFAULT_FASTER_WHISPER_MODEL
+        self._model: Any = None
+
+    def _load(self) -> Any:
+        if self._model is None:
+            try:
+                from faster_whisper import WhisperModel
+            except ImportError as exc:
+                raise MeetDependencyError("faster-whisper needs the meet extra") from exc
+            self._model = WhisperModel(self.model_id, device="auto", compute_type="int8")
+        return self._model
+
+    def language_probs(self, samples: Any) -> dict[str, float]:
+        model = self._load()
+        if not model.model.is_multilingual:
+            return {"en": 1.0}
+        _language, _probability, probs = model.detect_language(
+            audio=samples, language_detection_segments=1
+        )
+        return {str(code): float(p) for code, p in probs}
 
     def transcribe(self, audio: Path, *, language: str | None, prompt: str | None) -> list[Word]:
-        try:
-            from faster_whisper import WhisperModel
-        except ImportError as exc:
-            raise MeetDependencyError("faster-whisper needs the meet extra") from exc
-        model = WhisperModel(self.model_id, device="auto", compute_type="int8")
+        model = self._load()
         # Pass samples, not a path: our audio is already 16 kHz mono, and this skips
         # faster-whisper's PyAV decoder (whose arguments drift between PyAV releases).
         segments, _info = model.transcribe(
@@ -146,6 +191,70 @@ class FasterWhisperBackend:
                         )
                     )
         return words
+
+
+_RATE = 16_000
+_WINDOW = 30 * _RATE  # Whisper scores languages on 30-second windows
+
+
+def speech_windows(samples: Any, *, count: int = 3) -> list[Any]:
+    """Up to ``count`` 30-second windows with speech, one from each part of the
+    recording (so a meeting that opens with small talk in another language still
+    gets a say from its middle and end).
+
+    Each part contributes its loudest window (the audio is loudness-normalized,
+    so that is the one with most speech). Windows much quieter than the loudest
+    are left out: Whisper tends to call near-silence English.
+    """
+    import numpy as np
+
+    if len(samples) <= _WINDOW:
+        return [samples]
+    energy = np.concatenate([[0.0], np.cumsum(np.square(samples, dtype=np.float64))])
+
+    def loudness(start: int) -> float:
+        return float(energy[start + _WINDOW] - energy[start])
+
+    parts = max(1, min(count, len(samples) // _WINDOW))
+    part_length = len(samples) // parts
+    hop = 5 * _RATE
+    chosen: list[int] = []
+    for part in range(parts):
+        low = part * part_length
+        high = min(low + part_length, len(samples)) - _WINDOW
+        starts = [*range(low, high + 1, hop), high]
+        chosen.append(max(starts, key=loudness))
+    loudest = max(loudness(start) for start in chosen)
+    voiced = [start for start in chosen if loudness(start) >= 0.1 * loudest]
+    return [samples[start : start + _WINDOW] for start in voiced]
+
+
+def detect_language(
+    asr: AsrBackend, audio: Path, candidates: list[str] | None = None
+) -> LanguageGuess:
+    """Detect the spoken language from a few speech windows across the recording.
+
+    With ``candidates`` (the workspace's languages), the answer is the likeliest
+    of those: Whisper sometimes hears Spanish as Portuguese or Galician on short
+    or accented audio, and restricting the choice avoids that.
+    """
+    totals: dict[str, float] = {}
+    for window in speech_windows(_wav_samples(audio)):
+        for code, probability in asr.language_probs(window).items():
+            totals[code] = totals.get(code, 0.0) + probability
+    if not totals:
+        raise DossierError("language detection returned nothing; set the language explicitly")
+    heard = max(totals, key=lambda code: totals[code])
+    overall = sum(totals.values()) or 1.0
+    pool = {code: totals.get(code, 0.0) for code in candidates} if candidates else totals
+    best = max(pool, key=lambda code: pool[code])
+    share = pool[best] / (sum(pool.values()) or 1.0)
+    return LanguageGuess(
+        language=best,
+        probability=round(share, 3),
+        heard=heard,
+        heard_probability=round(totals[heard] / overall, 3),
+    )
 
 
 def _apple_silicon() -> bool:

@@ -8,6 +8,7 @@ from pathlib import Path
 from dossier.core.config import load_config
 from dossier.core.errors import ConfigError
 from dossier.core.io import atomic_write_text
+from dossier.core.languages import parse_language
 from dossier.core.paths import WorkspacePaths
 
 DEFAULT_CHAT_MODEL = "gemma4:e2b"
@@ -21,7 +22,9 @@ name = {name}
 # One short paragraph about what this workspace covers. Models get it as
 # context when summarizing, so keep it factual and free of personal data.
 brief = ""
-languages = ["en"]
+# Languages of the material: OCR hints, and the languages meetings are detected
+# among. With several, each recording's language is detected (see [meet]).
+languages = {languages}
 
 [policy]
 # Nothing in this workspace is read or processed until this says "approved".
@@ -83,13 +86,19 @@ template = "neutral"     # default template pack for rendered documents
 allow_render = false     # let MCP clients render documents
 
 [meet]
+# language = "auto"          # or "es", "en"...; default: auto with several languages
+# glossary = "glossary.toml" # terms and mishearings; see docs/meetings.md
 speaker_voiceprints = false  # opt-in; voiceprints are biometric data
 """
 
 
-def render_config(name: str, *, chat_model: str, embed_model: str) -> str:
+def render_config(
+    name: str, *, chat_model: str, embed_model: str, languages: list[str] | None = None
+) -> str:
+    codes = [parse_language(value, allow_auto=False) for value in languages or ["en"]]
     return _TEMPLATE.format(
         name=json.dumps(name),
+        languages=json.dumps(list(dict.fromkeys(codes))),
         chat_model=json.dumps(chat_model),
         embed_model=json.dumps(embed_model),
     )
@@ -101,15 +110,17 @@ def init_workspace(
     name: str,
     chat_model: str = DEFAULT_CHAT_MODEL,
     embed_model: str = DEFAULT_EMBED_MODEL,
+    languages: list[str] | None = None,
     force: bool = False,
 ) -> WorkspacePaths:
     paths = WorkspacePaths(root.resolve())
     if paths.config.exists() and not force:
         raise ConfigError(f"{paths.config} already exists; pass --force to overwrite it")
+    config = render_config(
+        name, chat_model=chat_model, embed_model=embed_model, languages=languages
+    )  # validates the languages before anything is written
     for directory in paths.skeleton():
         directory.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(
-        paths.config, render_config(name, chat_model=chat_model, embed_model=embed_model)
-    )
+    atomic_write_text(paths.config, config)
     load_config(paths.config)  # the template must always validate
     return paths
