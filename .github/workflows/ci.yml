@@ -19,6 +19,11 @@ jobs:
     # ocr and meet extras resolve to macOS-only packages, and mypy checks against them.
     runs-on: macos-latest
     timeout-minutes: 30
+    env:
+      # Use uv's own Python build. The runner's system Python ships an sqlite3
+      # module that cannot load extensions, so sqlite-vec (the embed extra)
+      # would be installed but unusable and vector search would degrade.
+      UV_PYTHON_PREFERENCE: only-managed
     steps:
       - uses: actions/checkout@v7
 
