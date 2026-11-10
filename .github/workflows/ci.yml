@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, types, tests
+    # macOS on Apple Silicon is the supported platform (README, Requirements): the
+    # ocr and meet extras resolve to macOS-only packages, and mypy checks against them.
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies (all extras, from the lockfile)
+        run: uv sync --all-extras --locked
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Mypy (strict)
+        run: uv run mypy
+
+      # Tests that need a system tool (ffmpeg, pandoc, typst, mmdc, draw.io,
+      # LibreOffice) skip when it is missing; `live_model` tests need a local
+      # model server and are deselected. See CONTRIBUTING.md.
+      - name: Pytest
+        run: uv run pytest -m "not live_model"
+
+      - name: Built-in privacy checks (email addresses, home-directory paths)
+        run: python3 scripts/denylist.py --all
